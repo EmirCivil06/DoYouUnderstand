@@ -18,6 +18,15 @@ const ALANLAR: Record<string, (v: unknown) => boolean> = {
   mockMode: (v) => typeof v === "boolean",
 };
 
+/** Hazır renk paletleri: doğru + yanlış rengi birlikte. */
+const PALETLER = [
+  { ad: "Klasik", dogru: "#22c55e", yanlis: "#ef4444" },
+  { ad: "Renk körü dostu", dogru: "#3b82f6", yanlis: "#f97316" },
+  { ad: "Pastel", dogru: "#86efac", yanlis: "#fca5a5" },
+  { ad: "Neon", dogru: "#39ff14", yanlis: "#ff2d75" },
+  { ad: "Okyanus", dogru: "#14b8a6", yanlis: "#d946ef" },
+];
+
 type AyarOlayi =
   | { tip: "hazir" }
   | { tip: "degistir"; anahtar: string; deger: unknown }
@@ -110,6 +119,15 @@ export function ayarlarHtml(nonce: string, ilk: Record<string, unknown>): string
   .renk input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--kenar); border-radius: 4px;
                             background: none; cursor: pointer; }
   .renk code { min-width: 66px; text-align: center; }
+  .satir.dikey { flex-direction: column; align-items: stretch; gap: 8px; }
+  .paletler { display: flex; flex-wrap: wrap; gap: 6px; }
+  .palet { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 14px;
+           background: transparent; color: var(--vscode-foreground); border: 1px solid var(--kenar); font-size: .9em; }
+  .palet:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.15)); }
+  .palet.secili { border-color: var(--vscode-focusBorder); background: color-mix(in srgb, var(--vurgu) 15%, transparent); }
+  .noktalar { display: inline-flex; }
+  .noktalar i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
+  .noktalar i + i { margin-left: -4px; }
   .hazir { display: flex; gap: 6px; }
   .hazir button { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--kenar); }
 
@@ -141,6 +159,9 @@ export function ayarlarHtml(nonce: string, ilk: Record<string, unknown>): string
   <div class="ikili">
     <section class="kart">
       <h2>Görünüm</h2>
+      <div class="satir dikey"><span><b>Renk paleti</b><small>Doğru ve yanlış rengini birlikte seçer</small></span>
+        <div class="paletler">${PALETLER.map((p) => `<button type="button" class="palet" data-dogru="${p.dogru}" data-yanlis="${p.yanlis}">
+          <span class="noktalar"><i data-renk="${p.dogru}"></i><i data-renk="${p.yanlis}"></i></span>${p.ad}</button>`).join("")}</div></div>
       <div class="satir"><span><b>Doğru rengi</b></span>
         <span class="renk"><span class="hazir" data-hedef="ui.correctColor">
           <button type="button" data-renk="#22c55e" title="Yeşil"></button><button type="button" data-renk="#14b8a6" title="Turkuaz"></button><button type="button" data-renk="#3b82f6" title="Mavi"></button></span>
@@ -210,6 +231,11 @@ export function ayarlarHtml(nonce: string, ilk: Record<string, unknown>): string
     b.style.background = b.dataset.renk; // CSSOM: CSP'ye takılmaz
     b.onclick = () => { kaydet(b.parentElement.dataset.hedef, b.dataset.renk); doldur(); };
   });
+  // hazır paletler: iki rengi birlikte değiştirir
+  document.querySelectorAll(".noktalar i").forEach((i) => (i.style.background = i.dataset.renk));
+  document.querySelectorAll(".palet").forEach((p) => {
+    p.onclick = () => { kaydet("ui.correctColor", p.dataset.dogru); kaydet("ui.wrongColor", p.dataset.yanlis); doldur(); };
+  });
   // segmentler
   document.querySelectorAll(".segment").forEach((s) => s.querySelectorAll("button").forEach((b) => {
     b.onclick = () => {
@@ -231,6 +257,9 @@ export function ayarlarHtml(nonce: string, ilk: Record<string, unknown>): string
   }
   function doldur() {
     document.querySelectorAll("input[type=color]").forEach((g) => (g.value = d[g.dataset.anahtar]));
+    const kucuk = (s) => String(s || "").toLowerCase();
+    document.querySelectorAll(".palet").forEach((p) => p.classList.toggle("secili",
+      kucuk(p.dataset.dogru) === kucuk(d["ui.correctColor"]) && kucuk(p.dataset.yanlis) === kucuk(d["ui.wrongColor"])));
     document.querySelectorAll(".segment").forEach((s) => s.querySelectorAll("button").forEach((b) =>
       b.classList.toggle("secili", String(d[s.dataset.anahtar]) === b.dataset.deger)));
     document.querySelectorAll("input[type=checkbox]").forEach((c) => (c.checked = !!d[c.dataset.anahtar]));

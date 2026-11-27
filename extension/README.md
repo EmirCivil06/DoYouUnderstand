@@ -134,7 +134,7 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.7.0.vsix --force
+  code --install-extension anladin-mi-0.8.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.

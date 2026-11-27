@@ -2,7 +2,7 @@
   "name": "anladin-mi",
   "displayName": "Anladın mı?",
   "description": "Commit'ten önce değişikliğin hakkında soru sorar, yanlışta Türkçe anlatır. Kapı değil, öğretmen.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "doyouunderstand",
   "license": "MIT",
   "engines": {
@@ -78,14 +78,16 @@
             "default": "#22c55e",
             "pattern": "^#[0-9a-fA-F]{6}$",
             "description": "Doğru cevap rengi (#RRGGBB).",
-            "order": 0
+            "order": 0,
+            "format": "color-hex"
           },
           "anladinmi.ui.wrongColor": {
             "type": "string",
             "default": "#ef4444",
             "pattern": "^#[0-9a-fA-F]{6}$",
             "description": "Yanlış cevap rengi (#RRGGBB).",
-            "order": 1
+            "order": 1,
+            "format": "color-hex"
           },
           "anladinmi.ui.optionSize": {
             "type": "string",
