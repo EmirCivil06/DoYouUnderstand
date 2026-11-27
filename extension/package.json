@@ -62,7 +62,8 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --allow-missing-repository --skip-license"
+    "package": "vsce package --allow-missing-repository --skip-license",
+    "sahte-backend": "node scripts/sahte-backend.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
