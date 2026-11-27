@@ -1,0 +1,36 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.idea/
+.vscode/
+CLAUDE.md
+
+# Test / araç önbellekleri
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Paketleme
+*.egg-info/
+build/
+dist/
+
+# Ek venv isimleri
+venv/
+env/
+
+# Ortam dosyaları (.env.example hariç)
+.env.*
+!.env.example
+
+# İlerleme kaydı (CLAUDE.md'ye göre JSON/SQLite)
+*.db
+*.sqlite3
+ilerleme.json
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
