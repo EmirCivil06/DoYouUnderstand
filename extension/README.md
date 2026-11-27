@@ -10,14 +10,16 @@ commit'lediğin kodu anlamanı sağlamak.
 
 Değişikliklerini stage et (Kaynak Denetimi panelinde `+`), sonra her zamanki gibi commit'le:
 
-- **Mavi Commit butonu** (ya da terminalde `git commit`): repo açılınca eklenti bir kez
-  *"Commit butonuna basınca da quiz açılsın mı?"* diye sorar. "Evet, bağla" dersen repoya bir
-  pre-commit hook kurulur; commit'e her basışta quiz kendiliğinden açılır, bitirince commit devam eder.
+- **Mavi Commit butonu** (ya da terminalde `git commit`): repo açılınca eklenti sormadan bir
+  pre-commit hook kurar (bildirimde **Geri al** var; ayar: `anladinmi.autoConnectHook`). Commit'e
+  her basışta quiz kendiliğinden açılır, bitirince commit devam eder. Repoda başka birinin hook'u
+  varsa dokunulmaz; hook'u elle kaldırırsan o repoya kendiliğinden tekrar kurulmaz.
 - **Commit kutusunda `Ctrl+Enter`**, panelin üstündeki **🎓** butonu ya da Komut Paleti →
   `Anladın mı? ile commit'le`: quiz açılır, sonunda commit'i eklenti atar.
 
-Sorular **tek tek** gelir (`Ctrl+Enter` = sonraki soru). Son sorudan sonra hepsi birlikte
-değerlendirilir; yanlışlar için kısa bir **Ders** gösterilir. Sonuç ne olursa olsun commit
+**3 soru**, her biri **5 şıklı ve tek doğru cevaplı**, **tek tek** gelir (`A`–`E` ya da `1`–`5`
+ile seç, `Enter` = sonraki soru). Son sorudan sonra hepsi birlikte değerlendirilir; sonuçta
+doğru/yanlış sayısı, doğru şıkkın açıklaması ve her yanlış şıkkın **aslında ne yaptığı** gösterilir. Sonuç ne olursa olsun commit
 atılabilir. Hook modunda *Quiz'i atla* ya da *Commit'i iptal et* de seçilebilir; quiz sekmesini
 kapatmak quiz'i atlamak sayılır.
 
@@ -40,8 +42,54 @@ VS Code eklentisi (bu klasör)  ── HTTP ──▶  backend/ (FastAPI, 127.0.
  - commit'i atar (git eklentisi API'si)
 ```
 
-Sözleşme: `backend/CLAUDE.md` bölüm 4 (`GET /health`, `POST /questions`, `POST /evaluate`).
-Eklenti `expected_points` alanını asla göstermez; backend unutsa bile istemci ayıklar.
+Sözleşme: `backend/CLAUDE.md` bölüm 4 (`GET /health`, `POST /questions`, `POST /evaluate`) +
+aşağıdaki çoktan seçmeli eki. Eklenti sorular için yalnızca `id, question, file, line_hint, topic,
+options` alanlarını alır (beyaz liste): `expected_points`, doğru şık ya da açıklama yanlışlıkla
+gönderilse bile cevaplamadan önce asla gösterilmez.
+
+## Backend sözleşmesi: çoktan seçmeli eki (backend'e iletilecek)
+
+Eklenti artık **3 soru, her biri 5 şıklı, tek doğru cevaplı** çoktan seçmeli soru istiyor.
+Ek geriye uyumlu: backend `options` göndermezse eklenti eski açık uçlu ekranı gösterir.
+
+**`POST /questions` isteğinde `params`'a iki alan eklendi** (pydantic bilmediği alanı zaten yok sayar):
+
+```json
+"params": { "num_questions": 3, "difficulty": "orta", "language": "tr", "focus_topics": [],
+            "question_type": "multiple_choice", "num_options": 5 }
+```
+
+**Yanıttaki her soruya `options` eklendi.** Doğru şık ve açıklamalar yanıtta **yok**; backend
+bunları `session_id` altında saklar (`expected_points` gibi):
+
+```json
+{ "id": "q1", "question": "`ortalama_fiyat({})` çağrılırsa ne olur?", "file": "sepet.py",
+  "line_hint": 24, "topic": "uç durumlar",
+  "options": [ {"id": "A", "text": "`0` döndürür"}, {"id": "B", "text": "`None` döndürür"},
+               {"id": "C", "text": "`ZeroDivisionError` hatası verir"}, {"id": "D", "text": "`KeyError` hatası verir"},
+               {"id": "E", "text": "`nan` döndürür"} ] }
+```
+
+**`POST /evaluate` isteği aynı**; `answer` artık seçilen şıkkın id'si: `{"question_id": "q1", "answer": "C"}`.
+Çoktan seçmeli değerlendirme için Claude'a gerek yok, backend doğru şıkla karşılaştırır (bedava).
+
+**Yanıttaki her sonuca iki alan eklendi:**
+
+```json
+{ "question_id": "q1", "correct": false, "score": 0,
+  "feedback": "Senin cevabın A, doğru cevap C.",
+  "explanation": "Boş sepette `sum(...)` 0 olur ve 0'a bölme `ZeroDivisionError` verir.",
+  "correct_option": "C",
+  "option_explanations": { "A": "Bunun için boş sepet kontrolü gerekirdi; kod doğrudan bölüyor.",
+                           "B": "...", "D": "...", "E": "..." } }
+```
+
+- `explanation`: doğru şık **neden doğru** (her zaman dolu).
+- `option_explanations`: her **yanlış** şık **aslında ne yapar / neden yanlış** (doğru şık hariç 4 tane).
+- Claude'dan soru üretirken hepsi tek seferde istenebilir (soru + 5 şık + doğru şık + 5 açıklama);
+  `score` 1 ya da 0, geçme kuralı aynı.
+
+Örnek veri: `src/ornekSorular.ts` (mock ve sahte backend bunu kullanıyor).
 
 ## Ayarlar
 
@@ -50,6 +98,7 @@ Eklenti `expected_points` alanını asla göstermez; backend unutsa bile istemci
 | `anladinmi.backendUrl` | `http://127.0.0.1:8765` | Backend adresi |
 | `anladinmi.difficulty` | `orta` | `kolay` / `orta` / `zor` |
 | `anladinmi.numQuestions` | `3` | 1–5 |
+| `anladinmi.autoConnectHook` | `true` | Repo açılınca Commit butonunu sormadan quiz'e bağla |
 | `anladinmi.mockMode` | `false` | Backend'e hiç gitmeden örnek sorular (çevrimdışı demo) |
 
 Backend'e ulaşılamazsa hata ekranında **Örnek sorularla dene** butonu çıkar.
@@ -67,7 +116,7 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.2.0.vsix --force
+  code --install-extension anladin-mi-0.3.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.

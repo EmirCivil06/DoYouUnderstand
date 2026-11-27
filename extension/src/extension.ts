@@ -19,13 +19,11 @@ export async function activate(context: vscode.ExtensionContext) {
     komut("anladinmi.commitWithQuiz", butonla),
     komut("anladinmi.installHook", async (arg) => {
       const repo = await repoSec(arg);
-      if (repo) await hookuKur(repo.rootUri.fsPath);
+      if (repo) await hookuKur(context, repo.rootUri.fsPath);
     }),
     komut("anladinmi.removeHook", async (arg) => {
       const repo = await repoSec(arg);
-      if (!repo) return;
-      const silindi = await hookKaldir(repo.rootUri.fsPath);
-      vscode.window.showInformationMessage(silindi ? "Hook kaldırıldı." : "Bu repoda Anladın mı? hook'u yok.");
+      if (repo) await hookuKaldir(context, repo.rootUri.fsPath);
     })
   );
 
@@ -53,29 +51,41 @@ function hataMetni(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+const istemiyor = (kok: string) => "hookIstemiyor:" + kok.toLowerCase();
+
+/** Repo açılınca: hook köprüsünü tanıt ve (ayar açıksa) hook'u sormadan bağla. */
 async function repoHazirla(context: vscode.ExtensionContext, kok: string) {
   try {
     await sunucu?.repoKaydet(kok);
+    const otomatik = vscode.workspace.getConfiguration("anladinmi").get<boolean>("autoConnectHook", true);
     const durum = await hookDurumu(kok);
-    const anahtar = "hookTeklifi:" + kok.toLowerCase();
-    if (durum === "bizim" || durum === "baska" || context.globalState.get(anahtar)) return;
+    // Başkasının hook'una dokunma; kullanıcı bu repoda kaldırdıysa tekrar kurma.
+    if (!otomatik || durum === "bizim" || durum === "baska" || context.globalState.get(istemiyor(kok))) return;
+    await hookKur(kok);
     const secim = await vscode.window.showInformationMessage(
-      `Anladın mı?: "${path.basename(kok)}" reposunda mavi Commit butonuna basınca da quiz açılsın mı?`,
-      "Evet, bağla",
-      "Hayır"
+      `Anladın mı? "${path.basename(kok)}" reposuna bağlandı: Commit butonu önce quiz'i açacak.`,
+      "Geri al"
     );
-    if (secim === "Evet, bağla") await hookuKur(kok);
-    else if (secim === "Hayır") await context.globalState.update(anahtar, true);
+    if (secim === "Geri al") await hookuKaldir(context, kok);
   } catch (e) {
     console.error("anladinmi repoHazirla", e);
   }
 }
 
-async function hookuKur(kok: string) {
+async function hookuKur(context: vscode.ExtensionContext, kok: string) {
   await hookKur(kok);
   await sunucu?.repoKaydet(kok);
+  await context.globalState.update(istemiyor(kok), undefined);
   vscode.window.showInformationMessage(
     `Anladın mı? "${path.basename(kok)}" reposuna bağlandı: Commit butonu artık önce quiz'i açacak.`
+  );
+}
+
+async function hookuKaldir(context: vscode.ExtensionContext, kok: string) {
+  const silindi = await hookKaldir(kok);
+  await context.globalState.update(istemiyor(kok), true);
+  vscode.window.showInformationMessage(
+    silindi ? "Hook kaldırıldı; bu repoya kendiliğinden tekrar kurulmayacak." : "Bu repoda Anladın mı? hook'u yok."
   );
 }
 
@@ -186,6 +196,8 @@ class Oturum {
         difficulty: ayar.get<"kolay" | "orta" | "zor">("difficulty", "orta"),
         language: "tr",
         focus_topics: [],
+        question_type: "multiple_choice",
+        num_options: 5,
       };
       await this.backend.saglik();
       const y = await this.backend.sorular(this.o.diff, context, params);

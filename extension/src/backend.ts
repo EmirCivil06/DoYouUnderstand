@@ -1,5 +1,6 @@
-// Backend (FastAPI) istemcisi. Sözleşme: backend/CLAUDE.md bölüm 4.
-// vscode'a bağlı DEĞİL: Node ile tek başına test edilebilir.
+// Backend (FastAPI) istemcisi. Sözleşme: backend/CLAUDE.md bölüm 4 + çoktan seçmeli eki
+// (extension/README.md "Backend sözleşmesi"). vscode'a bağlı DEĞİL: Node ile tek başına test edilebilir.
+import { ORNEK_SORULAR, OrnekSoru } from "./ornekSorular";
 
 export interface DiffContext {
   repo_name: string | null;
@@ -17,15 +18,27 @@ export interface QuestionParams {
   difficulty: "kolay" | "orta" | "zor";
   language: string;
   focus_topics: string[];
+  /** Sözleşme eki: backend bunları bilmiyorsa yok sayar (pydantic varsayılanı) ve açık uçlu sorar. */
+  question_type: "multiple_choice" | "open";
+  num_options: number;
 }
 
-/** Kullanıcıya gösterilen soru. expected_points BİLEREK yok: kullanıcıya asla gösterilmez. */
+export interface Secenek {
+  id: string; // "A".."E"
+  text: string;
+}
+
+/**
+ * Kullanıcıya gösterilen soru. expected_points ve doğru şık BİLEREK yok: cevaplamadan önce
+ * kullanıcıya asla gösterilmez. options doluysa çoktan seçmeli, boşsa açık uçlu.
+ */
 export interface Soru {
   id: string;
   question: string;
   file: string;
   line_hint: number | null;
   topic: string;
+  options: Secenek[];
 }
 
 export interface SoruYaniti {
@@ -38,7 +51,12 @@ export interface Sonuc {
   correct: boolean;
   score: number;
   feedback: string;
+  /** Çoktan seçmelide: doğru şık neden doğru. Açık uçluda: yanlışsa kodun açıklaması. */
   explanation: string | null;
+  /** Çoktan seçmeli: doğru şıkkın id'si ("C"). */
+  correct_option?: string | null;
+  /** Çoktan seçmeli: her YANLIŞ şık aslında ne yapar / neden yanlış. { "A": "...", ... } */
+  option_explanations?: Record<string, string>;
 }
 
 export interface DegerlendirmeYaniti {
@@ -103,11 +121,13 @@ export function httpBackend(baseUrl: string, zamanAsimiMs = 90_000): Backend {
     },
     async sorular(diff, context, params) {
       const y = await istek<SoruYaniti>("/questions", { diff, context, params });
-      // Güvenlik ağı: backend expected_points'i çıkarmayı unutursa biz atarız.
+      // Güvenlik ağı: backend expected_points / doğru şık / açıklama gönderse bile sadece
+      // gösterilecek alanları alırız (beyaz liste).
       return {
         session_id: y.session_id,
-        questions: (y.questions ?? []).map(({ id, question, file, line_hint, topic }) => ({
+        questions: (y.questions ?? []).map(({ id, question, file, line_hint, topic, options }) => ({
           id, question, file, line_hint: line_hint ?? null, topic,
+          options: Array.isArray(options) ? options.map((o) => ({ id: String(o.id), text: String(o.text) })) : [],
         })),
       };
     },
@@ -121,41 +141,49 @@ export function httpBackend(baseUrl: string, zamanAsimiMs = 90_000): Backend {
 
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Çoktan seçmeli değerlendirme: tek doğru şık, 1 ya da 0 puan. Mock ve sahte backend ortak kullanır. */
+export function coktanDegerlendir(soru: OrnekSoru, qid: string, cevap: string): Sonuc {
+  const secilen = cevap.trim().toUpperCase().slice(0, 1);
+  const correct = secilen === soru.correct_option;
+  return {
+    question_id: qid,
+    correct,
+    score: correct ? 1 : 0,
+    feedback: correct
+      ? "Doğru!"
+      : secilen
+        ? `Senin cevabın ${secilen}, doğru cevap ${soru.correct_option}.`
+        : `Boş bıraktın; doğru cevap ${soru.correct_option}.`,
+    explanation: soru.explanation,
+    correct_option: soru.correct_option,
+    option_explanations: soru.option_explanations,
+  };
+}
+
+export function gecti(results: Sonuc[]): DegerlendirmeYaniti {
+  const score = results.reduce((t, r) => t + r.score, 0) / Math.max(results.length, 1);
+  return { passed: results.every((r) => r.score >= 0.6) && score >= 0.7, score, results };
+}
+
 /** Backend hazır değilken arayüzü geliştirmek ve demoyu yedeklemek için. Claude'a gitmez. */
 export function mockBackend(): Backend {
-  let son: Soru[] = [];
+  let son: { id: string; ornek: OrnekSoru }[] = [];
   return {
     async saglik() {},
     async sorular(_diff, context, params) {
       await bekle(700);
-      const dosya = context.added_files[0] ?? context.modified_files[0] ?? "kod";
-      const havuz: Omit<Soru, "id">[] = [
-        { question: `${dosya} dosyasındaki yeni fonksiyona boş bir girdi (boş liste / boş sözlük) gelirse ne olur?`, file: dosya, line_hint: null, topic: "uç durumlar" },
-        { question: `Bu değişiklikteki bir fonksiyona None verilirse hangi satırda ve neden hata alınır?`, file: dosya, line_hint: null, topic: "hata yönetimi" },
-        { question: `Bu commit'te eklenen kod mevcut davranışı nasıl değiştiriyor? Bir cümleyle anlat.`, file: dosya, line_hint: null, topic: "genel anlama" },
-        { question: `Bu değişiklikte varsayılan değeri olan bir parametre var mı? Varsa çağrılar arasında nasıl davranır?`, file: dosya, line_hint: null, topic: "fonksiyonlar" },
-        { question: `Bu kodu test etmek için yazacağın ilk test ne olurdu?`, file: dosya, line_hint: null, topic: "test" },
-      ];
-      son = havuz.slice(0, params.num_questions).map((s, i) => ({ id: `q${i + 1}`, ...s }));
-      return { session_id: "mock-" + Date.now(), questions: son };
+      const dosya = context.added_files[0] ?? context.modified_files[0] ?? "sepet.py";
+      son = ORNEK_SORULAR.slice(0, params.num_questions).map((ornek, i) => ({ id: `q${i + 1}`, ornek }));
+      return {
+        session_id: "mock-" + Date.now(),
+        questions: son.map(({ id, ornek }) => ({
+          id, question: ornek.question, file: dosya, line_hint: ornek.line_hint, topic: ornek.topic, options: ornek.options,
+        })),
+      };
     },
     async degerlendir(_sessionId, cevaplar) {
-      await bekle(900);
-      const results: Sonuc[] = cevaplar.map((c) => {
-        const uzun = c.answer.trim().length >= 25;
-        return {
-          question_id: c.question_id,
-          correct: uzun,
-          score: uzun ? 0.8 : 0.3,
-          feedback: uzun ? "(Mock) Cevabın yeterince ayrıntılı görünüyor." : "(Mock) Cevap çok kısa ya da eksik.",
-          explanation: uzun
-            ? null
-            : "(Mock) Gerçek backend burada ilgili kodu yeni başlayan birine anlatır gibi açıklayacak. " +
-              "Örneğin `sum(sepet.values())` boş sepette 0 döner ve ardından gelen bölme `ZeroDivisionError` verir.",
-        };
-      });
-      const score = results.reduce((t, r) => t + r.score, 0) / Math.max(results.length, 1);
-      return { passed: results.every((r) => r.score >= 0.6) && score >= 0.7, score, results };
+      await bekle(700);
+      return gecti(son.map(({ id, ornek }) => coktanDegerlendir(ornek, id, cevaplar.find((c) => c.question_id === id)?.answer ?? "")));
     },
   };
 }

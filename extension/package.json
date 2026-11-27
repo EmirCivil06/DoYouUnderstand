@@ -2,7 +2,7 @@
   "name": "anladin-mi",
   "displayName": "Anladın mı?",
   "description": "Commit'ten önce değişikliğin hakkında soru sorar, yanlışta Türkçe anlatır. Kapı değil, öğretmen.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "doyouunderstand",
   "license": "MIT",
   "engines": {
@@ -68,6 +68,11 @@
           "maximum": 5,
           "default": 3,
           "description": "Kaç soru sorulsun (1-5)."
+        },
+        "anladinmi.autoConnectHook": {
+          "type": "boolean",
+          "default": true,
+          "description": "Repo açılınca mavi Commit butonunu sormadan quiz'e bağla (pre-commit hook kurar). Başka bir hook varsa dokunmaz."
         },
         "anladinmi.mockMode": {
           "type": "boolean",
