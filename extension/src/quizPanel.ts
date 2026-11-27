@@ -92,8 +92,8 @@ export function html(nonce: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style nonce="${nonce}">
   :root {
-    --iyi: var(--vscode-testing-iconPassed, #3fb950);
-    --kotu: var(--vscode-testing-iconFailed, #f85149);
+    --iyi: #22c55e;  /* canlı yeşil */
+    --kotu: #ef4444; /* canlı kırmızı */
     --kenar: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128,128,128,.35)));
     --soluk: var(--vscode-descriptionForeground);
     --kart: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
@@ -155,7 +155,7 @@ export function html(nonce: string): string {
 
   /* şıklar: sıkı aralık */
   .secenekler { display: flex; flex-direction: column; gap: 4px; }
-  .secenek { display: flex; gap: 10px; align-items: flex-start; padding: 6px 10px; border-radius: 6px;
+  .secenek { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 6px;
              border: 1px solid var(--kenar); background: var(--vscode-input-background); }
   label.secenek { cursor: pointer; position: relative; }
   label.secenek:hover { border-color: var(--vscode-focusBorder); }
@@ -202,6 +202,8 @@ export function html(nonce: string): string {
   .ozet-satir .k { font-size: .9em; color: var(--soluk); }
   .ozet-satir .k b { color: var(--vscode-foreground); font-weight: 600; }
   .hata { border-left: 3px solid var(--kotu); }
+  .kart.ozet-iyi { border: 2px solid var(--iyi); }
+  .kart.ozet-kotu { border: 2px solid var(--kotu); }
   .bitti-ekran { text-align: center; padding: 36px 0; }
   .bitti-ekran .ikon { font-size: 2.2em; color: var(--iyi); }
   .not { color: var(--soluk); font-size: .9em; }
@@ -397,7 +399,8 @@ export function html(nonce: string): string {
     }).join("");
 
     kok.innerHTML = baslik() +
-      \`<section class="kart">
+      // 3 sorudan 2+ doğru (en az üçte iki) -> yeşil çerçeve, yoksa kırmızı
+      \`<section class="kart \${dogru * 3 >= n * 2 ? "ozet-iyi" : "ozet-kotu"}">
         <h2>Özet</h2>
         <div class="ozet"><div class="sayi">\${dogru} / \${n} <small>doğru</small></div><div>\${kac(ozetMetni)}</div></div>
         <div class="ozet-liste">\${satirlar}</div>
