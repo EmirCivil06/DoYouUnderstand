@@ -1,0 +1,8 @@
+src/**
+node_modules/**
+**/*.map
+tsconfig.json
+.vscode/**
+CLAUDE.md
+out/onizleme.html
+*.vsix
