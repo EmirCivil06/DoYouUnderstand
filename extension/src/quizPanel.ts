@@ -37,8 +37,7 @@ export type Olay =
   | { tip: "iptal" } //                                 hook modu: commit iptal
   | { tip: "tekrar" }
   | { tip: "mockIleDene" }
-  | { tip: "kapat" }
-  | { tip: "ayarlar" }; //                              ⚙ butonu
+  | { tip: "kapat" };
 
 export class QuizPanel {
   private static aktif: QuizPanel | undefined;
@@ -62,7 +61,6 @@ export class QuizPanel {
     panel.webview.html = html(crypto.randomBytes(16).toString("base64"), temaOku());
     panel.webview.onDidReceiveMessage((o: Olay) => {
       if (o.tip === "kapat") panel.dispose();
-      else if (o.tip === "ayarlar") void vscode.commands.executeCommand("anladinmi.openSettings");
       else this.dinleyici?.(o);
     });
     panel.onDidDispose(() => {
@@ -122,7 +120,6 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
   .adimlar span.d { background: var(--iyi); }
   .adimlar span.y { background: var(--kotu); }
   .ipucu { color: var(--soluk); font-size: .85em; margin-top: 8px; }
-  #ayarlarAc { flex: none; font-size: .9em; }
 
   .karar { margin: 0 0 10px; font-weight: 600; }
   .karar.dogru { color: var(--iyi); } .karar.yanlis { color: var(--kotu); }
@@ -168,9 +165,6 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
   const tikla = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   ${TEMA_JS}
   temaUygula(${gomJson(tema)});
-  // ⚙ her ekranın başlığında; tek dinleyiciyle yakala
-  kok.addEventListener("click", (e) => { if (e.target.closest("#ayarlarAc")) gonder({ tip: "ayarlar" }); });
-  const AYAR_BUTONU = '<button class="metin" id="ayarlarAc" title="Ayarlar">⚙ Ayarlar</button>';
 
   // Güvenli metin: önce HTML kaçır, sonra yalnızca \`kod\` ve **kalın** parçalarını biçimlendir.
   const kac = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -181,11 +175,11 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
   let sonBaslik = null;
   function baslik(alt) {
     const b = sonBaslik;
-    if (!b) return "<header><div><h1>Anladın mı?</h1></div>" + AYAR_BUTONU + "</header>";
+    if (!b) return "<header><div><h1>Anladın mı?</h1></div></header>";
     return \`<header><div><h1>Anladın mı?</h1><div class="alt">
       <span>\${kac(b.repo)}</span><span>⎇ \${kac(b.branch)}</span><span>\${b.dosyaSayisi} dosya</span>
       \${b.mock ? '<span class="rozet mock">örnek sorular · backend yok</span>' : ""}
-      \${alt ? "<span>" + alt + "</span>" : ""}</div></div>\${AYAR_BUTONU}</header>\`;
+      \${alt ? "<span>" + alt + "</span>" : ""}</div></div></header>\`;
   }
 
   // quiz = { mod, sorular, i, cevaplar: {id: "B"}, sonuclar: {id: Sonuc}, bekliyor, hata, commitMesaji }

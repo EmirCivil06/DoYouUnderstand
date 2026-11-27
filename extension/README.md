@@ -110,8 +110,14 @@ soru** olur (aynı `session_id` ile 3 ayrı istek). Backend sadece gönderilen s
 | `anladinmi.ui.fontSize` | `normal` | Yazı boyutu: `kucuk` / `normal` / `buyuk` |
 | `anladinmi.ui.showWrongExplanations` | `true` | Yanlış şıkların açıklamalarını göster |
 
-Hepsini tek sayfadan değiştirmek için: quiz ekranındaki **⚙ Ayarlar**, Kaynak Denetimi panelinin
-`…` menüsü ya da Komut Paleti → `Anladın mı?: Ayarlar`. Görünüm değişiklikleri açık quiz'e canlı uygulanır.
+Ayarlar **Eklentiler sekmesinde** eklentinin kendi sayfasında:
+
+- Eklentinin **⚙** menüsü → **Görünüm ve ayarlar**: canlı önizlemeli ayarlar sayfası.
+- Eklenti sayfasındaki **Özellikler → Ayarlar** sekmesi ya da ⚙ → **Ayarlar**: VS Code'un kendi ayar listesi
+  (*Görünüm* ve *Quiz ve bağlantı* başlıkları altında).
+
+Komut Paleti → `Anladın mı?: Görünüm ve ayarlar` da aynı sayfayı açar. Görünüm değişiklikleri açık
+quiz'e canlı uygulanır; quiz ekranında ayar butonu yoktur.
 
 Backend'e ulaşılamazsa hata ekranında **Örnek sorularla dene** butonu çıkar.
 
@@ -128,7 +134,7 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.6.0.vsix --force
+  code --install-extension anladin-mi-0.7.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.
