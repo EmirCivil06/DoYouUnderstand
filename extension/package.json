@@ -2,7 +2,7 @@
   "name": "anladin-mi",
   "displayName": "Anladın mı?",
   "description": "Commit'ten önce değişikliğin hakkında soru sorar, yanlışta Türkçe anlatır. Kapı değil, öğretmen.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "doyouunderstand",
   "license": "MIT",
   "engines": {
@@ -29,6 +29,12 @@
         "command": "anladinmi.removeHook",
         "title": "Commit butonundan ayır (hook kaldır)",
         "category": "Anladın mı?"
+      },
+      {
+        "command": "anladinmi.openSettings",
+        "title": "Ayarlar",
+        "category": "Anladın mı?",
+        "icon": "$(gear)"
       }
     ],
     "keybindings": [
@@ -45,6 +51,11 @@
           "command": "anladinmi.commitWithQuiz",
           "when": "scmProvider == git",
           "group": "navigation"
+        },
+        {
+          "command": "anladinmi.openSettings",
+          "when": "scmProvider == git",
+          "group": "anladinmi"
         }
       ]
     },
@@ -78,6 +89,35 @@
           "type": "boolean",
           "default": false,
           "description": "Backend yerine örnek sorular kullan (backend hazır değilken geliştirme/demo için)."
+        },
+        "anladinmi.ui.correctColor": {
+          "type": "string",
+          "default": "#22c55e",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Doğru cevap rengi (#RRGGBB)."
+        },
+        "anladinmi.ui.wrongColor": {
+          "type": "string",
+          "default": "#ef4444",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Yanlış cevap rengi (#RRGGBB)."
+        },
+        "anladinmi.ui.optionSize": {
+          "type": "string",
+          "enum": ["kompakt", "normal", "genis"],
+          "default": "normal",
+          "description": "Şık kutularının boyutu."
+        },
+        "anladinmi.ui.fontSize": {
+          "type": "string",
+          "enum": ["kucuk", "normal", "buyuk"],
+          "default": "normal",
+          "description": "Quiz ekranının yazı boyutu."
+        },
+        "anladinmi.ui.showWrongExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cevaptan sonra yanlış şıkların 'aslında ne yaptığı' açıklamalarını göster."
         }
       }
     }

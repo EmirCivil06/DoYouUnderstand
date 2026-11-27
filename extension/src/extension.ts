@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { Backend, BackendHatasi, httpBackend, mockBackend, QuestionParams, Soru } from "./backend";
+import { AyarlarPanel } from "./ayarlarPanel";
+import { Backend,BackendHatasi, httpBackend, mockBackend, QuestionParams, Soru } from "./backend";
 import {
   baglamKur, gitApi, GitHatasi, hookDurumu, hookKaldir, hookKur, repoBul, repoSec, Repository, stagedDiff,
 } from "./git";
@@ -24,6 +25,10 @@ export async function activate(context: vscode.ExtensionContext) {
     komut("anladinmi.removeHook", async (arg) => {
       const repo = await repoSec(arg);
       if (repo) await hookuKaldir(context, repo.rootUri.fsPath);
+    }),
+    komut("anladinmi.openSettings", async () => AyarlarPanel.goster()),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("anladinmi.ui")) QuizPanel.temaYenile();
     })
   );
 

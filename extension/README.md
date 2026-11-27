@@ -104,6 +104,14 @@ soru** olur (aynı `session_id` ile 3 ayrı istek). Backend sadece gönderilen s
 | `anladinmi.numQuestions` | `3` | 1–5 |
 | `anladinmi.autoConnectHook` | `true` | Repo açılınca Commit butonunu sormadan quiz'e bağla |
 | `anladinmi.mockMode` | `false` | Backend'e hiç gitmeden örnek sorular (çevrimdışı demo) |
+| `anladinmi.ui.correctColor` | `#22c55e` | Doğru cevap rengi |
+| `anladinmi.ui.wrongColor` | `#ef4444` | Yanlış cevap rengi |
+| `anladinmi.ui.optionSize` | `normal` | Şık kutuları: `kompakt` / `normal` / `genis` |
+| `anladinmi.ui.fontSize` | `normal` | Yazı boyutu: `kucuk` / `normal` / `buyuk` |
+| `anladinmi.ui.showWrongExplanations` | `true` | Yanlış şıkların açıklamalarını göster |
+
+Hepsini tek sayfadan değiştirmek için: quiz ekranındaki **⚙ Ayarlar**, Kaynak Denetimi panelinin
+`…` menüsü ya da Komut Paleti → `Anladın mı?: Ayarlar`. Görünüm değişiklikleri açık quiz'e canlı uygulanır.
 
 Backend'e ulaşılamazsa hata ekranında **Örnek sorularla dene** butonu çıkar.
 
@@ -120,7 +128,7 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.5.0.vsix --force
+  code --install-extension anladin-mi-0.6.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.
@@ -139,4 +147,6 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 | `src/sunucu.ts` | Hook köprüsü: yerel sunucu, token, "tamam"/"iptal" yanıtı |
 | `src/backend.ts` | Backend istemcisi (+ mock), VS Code'a bağımlı değil |
 | `src/quizPanel.ts` | Webview: soru, sonuç, hata ekranları |
+| `src/ayarlarPanel.ts` | Webview: ayarlar sayfası (canlı önizlemeli) |
+| `src/tema.ts` | Görünüm ayarları + iki ekranın ortak CSS'i |
 | `scripts/sahte-backend.js` | Geliştirme için sahte backend |

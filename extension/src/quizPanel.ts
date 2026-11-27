@@ -3,6 +3,7 @@
 import * as crypto from "crypto";
 import * as vscode from "vscode";
 import type { Soru, Sonuc } from "./backend";
+import { gomJson, ORTAK_CSS, Tema, TEMA_JS, temaOku, VARSAYILAN_TEMA } from "./tema";
 
 /**
  * "buton": kullanıcı eklentiden başlattı, commit'i eklenti atar (mesaj sorulur).
@@ -18,7 +19,8 @@ export type Gorunum =
   | { tip: "soruSonucu"; soruId: string; sonuc?: Sonuc; hata?: string }
   | { tip: "commitlendi"; mesaj: string }
   | { tip: "hookBitti"; devam: boolean }
-  | { tip: "hata"; mod: Mod; metin: string; mockTeklifi: boolean };
+  | { tip: "hata"; mod: Mod; metin: string; mockTeklifi: boolean }
+  | { tip: "tema"; tema: Tema }; // ayarlar değişince canlı uygulanır
 
 export interface Baslik {
   repo: string;
@@ -35,7 +37,8 @@ export type Olay =
   | { tip: "iptal" } //                                 hook modu: commit iptal
   | { tip: "tekrar" }
   | { tip: "mockIleDene" }
-  | { tip: "kapat" };
+  | { tip: "kapat" }
+  | { tip: "ayarlar" }; //                              ⚙ butonu
 
 export class QuizPanel {
   private static aktif: QuizPanel | undefined;
@@ -56,9 +59,10 @@ export class QuizPanel {
   }
 
   private constructor(private readonly panel: vscode.WebviewPanel) {
-    panel.webview.html = html(crypto.randomBytes(16).toString("base64"));
+    panel.webview.html = html(crypto.randomBytes(16).toString("base64"), temaOku());
     panel.webview.onDidReceiveMessage((o: Olay) => {
       if (o.tip === "kapat") panel.dispose();
+      else if (o.tip === "ayarlar") void vscode.commands.executeCommand("anladinmi.openSettings");
       else this.dinleyici?.(o);
     });
     panel.onDidDispose(() => {
@@ -73,6 +77,11 @@ export class QuizPanel {
     this.kapaninca = kapaninca;
   }
 
+  /** Görünüm ayarları değişti: açık quiz ekranına hemen uygula. */
+  static temaYenile() {
+    QuizPanel.aktif?.ciz({ tip: "tema", tema: temaOku() });
+  }
+
   ciz(g: Gorunum) {
     void this.panel.webview.postMessage(g);
   }
@@ -82,7 +91,7 @@ export class QuizPanel {
   }
 }
 
-export function html(nonce: string): string {
+export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
   return /* html */ `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -91,89 +100,29 @@ export function html(nonce: string): string {
   content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style nonce="${nonce}">
-  :root {
-    --iyi: #22c55e;  /* canlı yeşil */
-    --kotu: #ef4444; /* canlı kırmızı */
-    --kenar: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128,128,128,.35)));
-    --soluk: var(--vscode-descriptionForeground);
-    --kart: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-    --vurgu: var(--vscode-progressBar-background, #0078d4);
-  }
-  * { box-sizing: border-box; }
-  body {
-    font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
-    color: var(--vscode-foreground); background: var(--vscode-editor-background);
-    margin: 0; padding: 28px 24px 48px; line-height: 1.5;
-  }
-  main { max-width: 720px; margin: 0 auto; }
-  header { margin-bottom: 20px; }
-  h1 { font-size: 1.6em; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
-  h2 { font-size: 1.15em; font-weight: 600; margin: 0 0 12px; }
+  ${ORTAK_CSS}
+  header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   .alt { color: var(--soluk); font-size: .95em; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
   .rozet { font-size: .78em; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--kenar); color: var(--soluk); }
   .rozet.mock { border-color: var(--vscode-editorWarning-foreground); color: var(--vscode-editorWarning-foreground); }
-  .kart {
-    background: var(--kart); border: 1px solid var(--kenar); border-radius: 8px;
-    padding: 18px 20px; margin-bottom: 14px;
-  }
   .ust { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
   .no { font-weight: 600; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; color: var(--soluk); }
   .konu { font-size: .8em; padding: 1px 8px; border-radius: 10px;
           background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .dosya { font-family: var(--vscode-editor-font-family); font-size: .85em; color: var(--soluk); margin-bottom: 8px; }
   .soru { font-size: 1.1em; margin: 0 0 12px; }
-  code { font-family: var(--vscode-editor-font-family); font-size: .92em; padding: 0 4px; border-radius: 3px;
-         background: var(--vscode-textCodeBlock-background); }
-  textarea, input[type=text] {
-    width: 100%; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, var(--kenar)); border-radius: 4px; padding: 8px 10px;
-  }
   textarea { min-height: 96px; resize: vertical; }
-  textarea:focus, input:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
   label.baslik { display: block; font-size: .9em; color: var(--soluk); margin: 18px 0 6px; }
   .butonlar { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
   .butonlar.orta { justify-content: center; }
   .bosluk { flex: 1; }
-  button {
-    font: inherit; border: none; border-radius: 4px; padding: 7px 16px; cursor: pointer;
-    background: var(--vscode-button-background); color: var(--vscode-button-foreground);
-  }
-  button:hover { background: var(--vscode-button-hoverBackground); }
-  button.ikincil { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-  button.ikincil:hover { background: var(--vscode-button-secondaryHoverBackground); }
-  button.metin { background: none; color: var(--vscode-textLink-foreground); padding: 7px 6px; }
-  button.metin:hover { text-decoration: underline; background: none; }
-  button:disabled { opacity: .5; cursor: default; }
   .adimlar { display: flex; gap: 6px; margin: 0 0 16px; }
   .adimlar span { flex: 1; height: 4px; border-radius: 2px; background: var(--kenar); }
   .adimlar span.simdi { background: var(--vurgu); }
   .adimlar span.d { background: var(--iyi); }
   .adimlar span.y { background: var(--kotu); }
   .ipucu { color: var(--soluk); font-size: .85em; margin-top: 8px; }
-  kbd { font-family: var(--vscode-editor-font-family); font-size: .85em; padding: 0 5px; border-radius: 3px;
-        border: 1px solid var(--kenar); }
-
-  /* şıklar: sıkı aralık */
-  .secenekler { display: flex; flex-direction: column; gap: 4px; }
-  .secenek { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 6px;
-             border: 1px solid var(--kenar); background: var(--vscode-input-background); }
-  label.secenek { cursor: pointer; position: relative; }
-  label.secenek:hover { border-color: var(--vscode-focusBorder); }
-  .secenek input { position: absolute; opacity: 0; pointer-events: none; }
-  .secenek .harf { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-                   font-weight: 600; font-size: .85em; border: 1px solid var(--kenar); color: var(--soluk); }
-  .secenek .metin { flex: 1; padding-top: 1px; }
-  .secenek.secili { border-color: var(--vurgu); background: color-mix(in srgb, var(--vurgu) 12%, var(--vscode-input-background)); }
-  .secenek.secili .harf { background: var(--vurgu); border-color: var(--vurgu); color: var(--vscode-button-foreground); }
-  .cevaplandi .secenek { background: transparent; }
-  .cevaplandi .secenek.dogru { border-color: var(--iyi); background: color-mix(in srgb, var(--iyi) 10%, transparent); }
-  .cevaplandi .secenek.dogru .harf { background: var(--iyi); border-color: var(--iyi); color: #fff; }
-  .cevaplandi .secenek.yanlis { border-color: var(--kotu); background: color-mix(in srgb, var(--kotu) 10%, transparent); }
-  .cevaplandi .secenek.yanlis .harf { background: var(--kotu); border-color: var(--kotu); color: #fff; }
-  .etiket { display: inline-block; margin-left: 8px; font-size: .75em; font-weight: 600; color: var(--soluk);
-            text-transform: uppercase; letter-spacing: .04em; }
-  .dogru .etiket { color: var(--iyi); } .yanlis .etiket { color: var(--kotu); }
-  .aciklama { margin-top: 3px; font-size: .9em; opacity: .85; }
+  #ayarlarAc { flex: none; font-size: .9em; }
 
   .karar { margin: 0 0 10px; font-weight: 600; }
   .karar.dogru { color: var(--iyi); } .karar.yanlis { color: var(--kotu); }
@@ -217,6 +166,11 @@ export function html(nonce: string): string {
   const gonder = (o) => vscode.postMessage(o);
   const $ = (id) => document.getElementById(id);
   const tikla = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+  ${TEMA_JS}
+  temaUygula(${gomJson(tema)});
+  // ⚙ her ekranın başlığında; tek dinleyiciyle yakala
+  kok.addEventListener("click", (e) => { if (e.target.closest("#ayarlarAc")) gonder({ tip: "ayarlar" }); });
+  const AYAR_BUTONU = '<button class="metin" id="ayarlarAc" title="Ayarlar">⚙ Ayarlar</button>';
 
   // Güvenli metin: önce HTML kaçır, sonra yalnızca \`kod\` ve **kalın** parçalarını biçimlendir.
   const kac = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -227,11 +181,11 @@ export function html(nonce: string): string {
   let sonBaslik = null;
   function baslik(alt) {
     const b = sonBaslik;
-    if (!b) return "<header><h1>Anladın mı?</h1></header>";
-    return \`<header><h1>Anladın mı?</h1><div class="alt">
+    if (!b) return "<header><div><h1>Anladın mı?</h1></div>" + AYAR_BUTONU + "</header>";
+    return \`<header><div><h1>Anladın mı?</h1><div class="alt">
       <span>\${kac(b.repo)}</span><span>⎇ \${kac(b.branch)}</span><span>\${b.dosyaSayisi} dosya</span>
       \${b.mock ? '<span class="rozet mock">örnek sorular · backend yok</span>' : ""}
-      \${alt ? "<span>" + alt + "</span>" : ""}</div></header>\`;
+      \${alt ? "<span>" + alt + "</span>" : ""}</div></div>\${AYAR_BUTONU}</header>\`;
   }
 
   // quiz = { mod, sorular, i, cevaplar: {id: "B"}, sonuclar: {id: Sonuc}, bekliyor, hata, commitMesaji }
@@ -495,7 +449,12 @@ export function html(nonce: string): string {
     },
   };
 
-  window.addEventListener("message", (e) => { const g = e.data; klavye = null; if (ciz[g.tip]) ciz[g.tip](g); });
+  window.addEventListener("message", (e) => {
+    const g = e.data;
+    if (g.tip === "tema") return temaUygula(g.tema); // ekranı ve klavyeyi bozmadan
+    klavye = null;
+    if (ciz[g.tip]) ciz[g.tip](g);
+  });
 </script>
 </body>
 </html>`;
