@@ -26,11 +26,6 @@ env/
 .env.*
 !.env.example
 
-# İlerleme kaydı (CLAUDE.md'ye göre JSON/SQLite)
-*.db
-*.sqlite3
-ilerleme.json
-
 # İşletim sistemi
 .DS_Store
 Thumbs.db
