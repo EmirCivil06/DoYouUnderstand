@@ -1,41 +1,27 @@
-// VS Code'un yerleşik Git eklentisiyle konuşur: staged diff, bağlam, commit.
+// Git tarafı: repo seçimi (VS Code git API), diff ve bağlam (git CLI), hook kurulumu.
+// Diff/bağlam için doğrudan git CLI kullanıyoruz: hook akışında commit sürerken VS Code'un
+// git kuyruğu meşgul olabilir, CLI ise index'i her zaman okuyabilir.
+import { execFile } from "child_process";
+import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import type { DiffContext } from "./backend";
 
 // --- vscode.git API'sinin kullandığımız küçük bir parçası (resmi git.d.ts'ten) ---
-const enum Status {
-  INDEX_MODIFIED = 0,
-  INDEX_ADDED = 1,
-  INDEX_DELETED = 2,
-  INDEX_RENAMED = 3,
-  INDEX_COPIED = 4,
-}
-
-interface Change {
-  readonly uri: vscode.Uri;
-  readonly originalUri: vscode.Uri;
-  readonly status: Status;
-}
-
 export interface Repository {
   readonly rootUri: vscode.Uri;
   readonly inputBox: { value: string };
-  readonly state: {
-    readonly HEAD: { readonly name?: string } | undefined;
-    readonly indexChanges: Change[];
-  };
-  diff(cached?: boolean): Promise<string>;
   commit(message: string): Promise<void>;
 }
 
-interface GitAPI {
+export interface GitAPI {
   readonly repositories: Repository[];
+  onDidOpenRepository: vscode.Event<Repository>;
 }
 
 export class GitHatasi extends Error {}
 
-function gitApi(): GitAPI {
+export function gitApi(): GitAPI {
   const ext = vscode.extensions.getExtension<{ getAPI(v: 1): GitAPI }>("vscode.git");
   if (!ext || !ext.isActive) {
     throw new GitHatasi("VS Code'un Git eklentisi etkin değil.");
@@ -43,7 +29,12 @@ function gitApi(): GitAPI {
   return ext.exports.getAPI(1);
 }
 
-/** Komut Kaynak Denetimi panelinden çağrıldıysa o repoyu, değilse tek repoyu ya da seçileni döndürür. */
+export function repoBul(kok: string): Repository | undefined {
+  const norm = (p: string) => path.resolve(p).toLowerCase();
+  return gitApi().repositories.find((r) => norm(r.rootUri.fsPath) === norm(kok));
+}
+
+/** Kaynak Denetimi'nden çağrıldıysa o repo, değilse tek repo ya da kullanıcının seçtiği. */
 export async function repoSec(arg?: { rootUri?: vscode.Uri }): Promise<Repository | undefined> {
   const repos = gitApi().repositories;
   if (repos.length === 0) {
@@ -61,28 +52,25 @@ export async function repoSec(arg?: { rootUri?: vscode.Uri }): Promise<Repositor
   return secim?.r;
 }
 
-// Lock dosyaları soru üretmek için gürültü; diff'ten çıkarılır (CLI ile aynı kural).
-const HARIC = [/\.lock$/i, /(^|\/)package-lock\.json$/i];
-
-/** Diff'i dosya bloklarına böler: "diff --git a/x b/x" -> blok. */
-function bloklar(diff: string): { dosya: string; metin: string }[] {
-  const parcalar = diff.split(/^(?=diff --git )/m).filter((p) => p.trim());
-  return parcalar.map((metin) => {
-    const m = /^diff --git a\/(.+?) b\/(.+)$/m.exec(metin);
-    return { dosya: m ? m[2] : "", metin };
+export function git(kok: string, args: string[]): Promise<string> {
+  return new Promise((coz, reddet) => {
+    execFile("git", args, { cwd: kok, maxBuffer: 50 * 1024 * 1024, windowsHide: true }, (hata, stdout, stderr) => {
+      if (hata) reddet(new GitHatasi((stderr || hata.message).trim()));
+      else coz(stdout);
+    });
   });
 }
 
-export async function stagedDiff(repo: Repository): Promise<string> {
-  const ham = await repo.diff(true);
-  const temiz = bloklar(ham)
-    .filter((b) => !HARIC.some((re) => re.test(b.dosya)))
-    .map((b) => b.metin)
-    .join("");
-  if (!temiz.trim()) {
+// Lock dosyaları soru üretmek için gürültü; diff'ten çıkarılır (CLI ile aynı kural).
+// Pathspec'te * "/" işaretini de geçer: hem kökteki hem alt klasördeki dosyaları yakalar.
+const HARIC = [":(exclude)*.lock", ":(exclude)*package-lock.json"];
+
+export async function stagedDiff(kok: string): Promise<string> {
+  const diff = await git(kok, ["diff", "--cached", "--", ".", ...HARIC]);
+  if (!diff.trim()) {
     throw new GitHatasi("Staged değişiklik yok. Önce dosyaları stage et (+ butonu ya da git add).");
   }
-  return temiz;
+  return diff;
 }
 
 const DILLER: Record<string, string> = {
@@ -92,30 +80,98 @@ const DILLER: Record<string, string> = {
   ".dart": "dart", ".sql": "sql", ".html": "html", ".css": "css", ".sh": "shell", ".ps1": "powershell",
 };
 
-export function baglamKur(repo: Repository, diff: string, commitMesaji: string): DiffContext {
-  const rel = (u: vscode.Uri) => path.relative(repo.rootUri.fsPath, u.fsPath).replace(/\\/g, "/");
+export async function baglamKur(kok: string, diff: string, commitMesaji: string): Promise<DiffContext> {
   const added: string[] = [];
   const modified: string[] = [];
   const deleted: string[] = [];
-  for (const c of repo.state.indexChanges) {
-    if (c.status === Status.INDEX_ADDED || c.status === Status.INDEX_COPIED) added.push(rel(c.uri));
-    else if (c.status === Status.INDEX_DELETED) deleted.push(rel(c.uri));
-    else modified.push(rel(c.uri));
+  const durum = await git(kok, ["diff", "--cached", "--name-status", "--", ".", ...HARIC]);
+  for (const satir of durum.split("\n").filter(Boolean)) {
+    const [kod, ...yollar] = satir.split("\t");
+    const dosya = yollar[yollar.length - 1];
+    if (kod.startsWith("A") || kod.startsWith("C")) added.push(dosya);
+    else if (kod.startsWith("D")) deleted.push(dosya);
+    else modified.push(dosya);
+  }
+  let branch: string | null = null;
+  try {
+    branch = (await git(kok, ["rev-parse", "--abbrev-ref", "HEAD"])).trim() || null;
+  } catch {
+    branch = null; // henüz commit yok
   }
   const diller = new Set<string>();
   for (const f of [...added, ...modified]) {
     const d = DILLER[path.extname(f).toLowerCase()];
     if (d) diller.add(d);
   }
-  const readme = bloklar(diff).find((b) => /(^|\/)readme(\.[a-z]+)?$/i.test(b.dosya));
+  const readme = diff
+    .split(/^(?=diff --git )/m)
+    .find((b) => /^diff --git a\/\S+ b\/(\S+\/)?readme(\.[a-z]+)?$/im.test(b.split("\n")[0]));
   return {
-    repo_name: path.basename(repo.rootUri.fsPath),
-    branch: repo.state.HEAD?.name ?? null,
+    repo_name: path.basename(kok),
+    branch: branch === "HEAD" ? null : branch,
     commit_message: commitMesaji || null,
     added_files: added,
     modified_files: modified,
     deleted_files: deleted,
-    readme_diff: readme ? readme.metin : null,
+    readme_diff: readme ?? null,
     languages: [...diller],
   };
+}
+
+// ---------------------------------------------------------------- pre-commit hook
+
+export const HOOK_ISARET = "# anladinmi-vscode-hook";
+const CLI_ISARET = "# anladinmi-hook"; // cli/main.py'nin terminal hook'u: bunun üstüne yazabiliriz
+export const BAGLANTI_DOSYASI = "anladinmi-vscode.json";
+
+/** Hook: VS Code açıksa quiz'i orada açar ve bitmesini bekler; değilse commit'e karışmaz. */
+const HOOK = `#!/bin/sh
+${HOOK_ISARET}
+# Anladın mı? VS Code eklentisi kurdu. Mavi Commit butonuna basınca quiz'i VS Code'da açar.
+# VS Code kapalıysa ya da cevap gelmezse commit'e engel olmaz.
+f="$(git rev-parse --absolute-git-dir)/${BAGLANTI_DOSYASI}"
+[ -f "$f" ] || exit 0
+port=$(sed -n 's/.*"port": *\\([0-9][0-9]*\\).*/\\1/p' "$f")
+token=$(sed -n 's/.*"token": *"\\([^"]*\\)".*/\\1/p' "$f")
+[ -n "$port" ] && [ -n "$token" ] || exit 0
+cevap=$(curl -s --max-time 1800 -X POST -H "X-Anladinmi-Token: $token" "http://127.0.0.1:$port/quiz") || exit 0
+if [ "$cevap" = "iptal" ]; then
+  echo "Anladın mı?: commit iptal edildi." >&2
+  exit 1
+fi
+exit 0
+`;
+
+export async function hookYolu(kok: string): Promise<string> {
+  const klasor = (await git(kok, ["rev-parse", "--git-path", "hooks"])).trim();
+  return path.resolve(kok, klasor, "pre-commit");
+}
+
+export async function hookDurumu(kok: string): Promise<"bizim" | "yok" | "cli" | "baska"> {
+  const yol = await hookYolu(kok);
+  if (!fs.existsSync(yol)) return "yok";
+  const icerik = fs.readFileSync(yol, "utf8");
+  if (icerik.includes(HOOK_ISARET)) return "bizim";
+  if (icerik.includes(CLI_ISARET)) return "cli";
+  return "baska";
+}
+
+export async function hookKur(kok: string): Promise<void> {
+  const durum = await hookDurumu(kok);
+  if (durum === "baska") {
+    throw new GitHatasi("Bu repoda başka bir pre-commit hook var; üstüne yazmadım.");
+  }
+  const yol = await hookYolu(kok);
+  fs.mkdirSync(path.dirname(yol), { recursive: true });
+  fs.writeFileSync(yol, HOOK, { encoding: "utf8", mode: 0o755 });
+}
+
+export async function hookKaldir(kok: string): Promise<boolean> {
+  if ((await hookDurumu(kok)) !== "bizim") return false;
+  fs.unlinkSync(await hookYolu(kok));
+  return true;
+}
+
+export async function gitKlasoru(kok: string): Promise<string> {
+  return (await git(kok, ["rev-parse", "--absolute-git-dir"])).trim();
 }

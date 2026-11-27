@@ -11,7 +11,7 @@
   "categories": ["SCM Providers", "Education"],
   "main": "./out/extension.js",
   "extensionDependencies": ["vscode.git"],
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [
       {
@@ -19,6 +19,24 @@
         "title": "Anladın mı? ile commit'le",
         "category": "Anladın mı?",
         "icon": "$(mortar-board)"
+      },
+      {
+        "command": "anladinmi.installHook",
+        "title": "Commit butonuna bağla (hook kur)",
+        "category": "Anladın mı?"
+      },
+      {
+        "command": "anladinmi.removeHook",
+        "title": "Commit butonundan ayır (hook kaldır)",
+        "category": "Anladın mı?"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "anladinmi.commitWithQuiz",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "scmRepository"
       }
     ],
     "menus": {

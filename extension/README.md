@@ -8,13 +8,28 @@ commit'lediğin kodu anlamanı sağlamak.
 
 ## Kullanım
 
-1. Değişikliklerini stage et (Kaynak Denetimi panelinde `+`).
-2. Panelin üstündeki **🎓 Anladın mı? ile commit'le** butonuna bas
-   (ya da Komut Paleti → `Anladın mı?: Anladın mı? ile commit'le`).
-3. Soruları kendi cümlelerinle cevapla → **Cevapları gönder**.
-4. Sonuçları ve dersleri oku → **Commit'le**.
+Değişikliklerini stage et (Kaynak Denetimi panelinde `+`), sonra her zamanki gibi commit'le:
 
-Değişiklik önemsizse (sadece boşluk/yorum) backend soru üretmez, direkt commit ekranı gelir.
+- **Mavi Commit butonu** (ya da terminalde `git commit`): repo açılınca eklenti bir kez
+  *"Commit butonuna basınca da quiz açılsın mı?"* diye sorar. "Evet, bağla" dersen repoya bir
+  pre-commit hook kurulur; commit'e her basışta quiz kendiliğinden açılır, bitirince commit devam eder.
+- **Commit kutusunda `Ctrl+Enter`**, panelin üstündeki **🎓** butonu ya da Komut Paleti →
+  `Anladın mı? ile commit'le`: quiz açılır, sonunda commit'i eklenti atar.
+
+Sorular **tek tek** gelir (`Ctrl+Enter` = sonraki soru). Son sorudan sonra hepsi birlikte
+değerlendirilir; yanlışlar için kısa bir **Ders** gösterilir. Sonuç ne olursa olsun commit
+atılabilir. Hook modunda *Quiz'i atla* ya da *Commit'i iptal et* de seçilebilir; quiz sekmesini
+kapatmak quiz'i atlamak sayılır.
+
+Değişiklik önemsizse (sadece boşluk/yorum) backend soru üretmez, commit direkt devam eder.
+
+### Hook nasıl çalışıyor?
+
+Eklenti `127.0.0.1` üzerinde rastgele bir portta küçük bir sunucu açar ve port + rastgele bir
+token'ı `.git/anladinmi-vscode.json` dosyasına yazar. `.git/hooks/pre-commit` bu adrese `curl`
+ile istek atar ve quiz bitene kadar bekler. **VS Code kapalıysa, token tutmazsa ya da bir hata
+olursa hook commit'e karışmaz.** Hook'u kaldırmak için: Komut Paleti →
+`Anladın mı?: Commit butonundan ayır`.
 
 ## Mimari
 
@@ -63,7 +78,8 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 | Dosya | Görev |
 |---|---|
 | `src/extension.ts` | Komut ve akış: soru al → cevapla → değerlendir → commit |
-| `src/git.ts` | VS Code git API'si: repo seçimi, staged diff, bağlam, commit |
+| `src/git.ts` | Repo seçimi (VS Code git API), staged diff ve bağlam (git CLI), hook kurulumu |
+| `src/sunucu.ts` | Hook köprüsü: yerel sunucu, token, "tamam"/"iptal" yanıtı |
 | `src/backend.ts` | Backend istemcisi (+ mock), VS Code'a bağımlı değil |
 | `src/quizPanel.ts` | Webview: soru, sonuç, hata ekranları |
 | `scripts/sahte-backend.js` | Geliştirme için sahte backend |

@@ -63,7 +63,7 @@ function puanla(cevap, beklenen) {
   const c = cevap.toLocaleLowerCase("tr");
   if (!c.trim()) return 0;
   const isabet = beklenen.filter((k) => c.includes(k.toLocaleLowerCase("tr"))).length;
-  return Math.min(1, 0.25 + isabet * 0.35);
+  return [0, 0.6, 0.85, 1][Math.min(isabet, 3)]; // hiç isabet yoksa 0: yanlış cevap puan almaz
 }
 
 async function yonlendir(yol, govde) {
@@ -99,7 +99,7 @@ async function yonlendir(yol, govde) {
       const correct = score >= 0.6;
       return {
         question_id: s.id, correct, score,
-        feedback: correct ? "Doğru, ana noktayı yakalamışsın." : cevap.trim() ? "Kısmen doğru ama önemli bir nokta eksik." : "Boş bıraktın; birlikte bakalım.",
+        feedback: correct ? "Doğru, ana noktayı yakalamışsın." : cevap.trim() ? "Bu cevap kodun davranışını kaçırıyor." : "Boş bıraktın; birlikte bakalım.",
         explanation: correct ? null : s.explanation,
       };
     });
