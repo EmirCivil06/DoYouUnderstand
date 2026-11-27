@@ -1,4 +1,4 @@
-"""Manual test: generate questions for a diff via src.ai.soru_uret (~$0.001).
+"""Manual test: generate multiple-choice questions for a diff via src.ai.soru_uret (~$0.002).
 
 Run: .venv\\Scripts\\python tests/try_questions.py [path/to/file.diff]
 """
@@ -15,9 +15,10 @@ def main():
     questions = soru_uret(diff)
     for q in questions:
         print(f"\n[{q.id}] ({q.topic}) {q.file}:{q.line_hint}\n  {q.question}")
-        for p in q.expected_points:
-            print(f"    - {p}")
-    assert 1 <= len(questions) <= 5, f"unexpected question count: {len(questions)}"
+        for o in q.options:
+            mark = "*" if o.id == q.correct_option else " "
+            print(f"   {mark} {o.id}) {o.text}\n        -> {o.explanation}")
+    assert 1 <= len(questions) <= 3, f"unexpected question count: {len(questions)}"
     print("\nOK")
 
 
