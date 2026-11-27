@@ -9,14 +9,17 @@ load_dotenv(BACKEND_DIR / ".env")
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")  # (env)
 
-# Quiz format: NUM_QUESTIONS multiple-choice questions, NUM_OPTIONS options each, one correct.
+# Quiz format: params.num_questions multiple-choice questions (default NUM_QUESTIONS, at most
+# MAX_QUESTIONS), NUM_OPTIONS options each, exactly one correct.
 NUM_QUESTIONS = 3
-NUM_OPTIONS = 4
-OPTION_IDS = ("a", "b", "c", "d")  # assigned by the backend after shuffling
+MAX_QUESTIONS = 5
+NUM_OPTIONS = 5
+OPTION_IDS = ("a", "b", "c", "d", "e")  # assigned by the backend after shuffling
 
 QUESTION_EFFORT = "medium"
-# Thinking + 3 questions x 4 options with an explanation each; truncation costs a retry.
-QUESTION_MAX_TOKENS = 6000
+# Thinking + up to 5 questions x 5 options with an explanation each; truncation costs a retry.
+# Only tokens actually generated are billed, so a generous ceiling is free.
+QUESTION_MAX_TOKENS = 12000
 
 # Haiku 5.5 pricing, $ per 1M tokens (prompts < 100K tokens). Used only for cost logging.
 PRICE_IN, PRICE_OUT = 0.10, 0.50

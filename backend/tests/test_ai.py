@@ -4,10 +4,12 @@ from types import SimpleNamespace
 import pytest
 
 from src import ai
-from src.schemas import Option, Question, QuestionSet
+from src.schemas import Option, Question, QuestionParams, QuestionSet
+
+IDS = "abcde"
 
 
-def _q(qid, ids="abcd", correct="b"):
+def _q(qid, ids=IDS, correct="b"):
     return Question(id=qid, question="?", file="a.py", topic="t", correct_option=correct,
                     options=[Option(id=i, text=f"metin {i}", explanation=f"neden {i}") for i in ids])
 
@@ -24,19 +26,25 @@ def test_shuffle_keeps_correct_option_and_explanations(monkeypatch):
     _mock_claude(monkeypatch, [_q("q1")])
     for _ in range(20):
         (q,) = ai.soru_uret("+x")
-        assert [o.id for o in q.options] == list("abcd")
+        assert [o.id for o in q.options] == list(IDS)
         correct = next(o for o in q.options if o.id == q.correct_option)
         assert correct.text == "metin b" and correct.explanation == "neden b"
 
 
 def test_malformed_questions_dropped_and_capped(monkeypatch):
     _mock_claude(monkeypatch, [
-        _q("bad1", ids="abc"),            # 3 options
+        _q("bad1", ids="abcd"),           # 4 options (5 required)
         _q("bad2", correct="z"),          # correct option not among options
-        _q("bad3", ids="aabc"),           # duplicate ids
+        _q("bad3", ids="aabcd"),          # duplicate ids
         _q("q1"), _q("q2"), _q("q3"), _q("q4"),
     ])
-    assert [q.id for q in ai.soru_uret("+x")] == ["q1", "q2", "q3"]
+    assert [q.id for q in ai.soru_uret("+x")] == ["q1", "q2", "q3"]  # default: 3
+
+
+def test_num_questions_param(monkeypatch):
+    _mock_claude(monkeypatch, [_q(f"q{i}") for i in range(1, 7)])
+    assert len(ai.soru_uret("+x", params=QuestionParams(num_questions=5))) == 5
+    assert len(ai.soru_uret("+x", params=QuestionParams(num_questions=1))) == 1
 
 
 def test_all_malformed_raises(monkeypatch):

@@ -54,10 +54,10 @@ def _parsed(response, what: str):
 def soru_uret(diff: str, context: DiffContext | None = None,
               params: QuestionParams | None = None,
               omitted_files: list[str] | None = None) -> list[Question]:
-    """Generate NUM_QUESTIONS multiple-choice questions. Empty list = trivial diff, allow commit."""
+    """Generate params.num_questions multiple-choice questions. Empty list = trivial diff."""
     context = context or DiffContext()
     params = params or QuestionParams()
-    n = config.NUM_QUESTIONS
+    n = params.num_questions
     response = get_client().messages.parse(
         model=config.MODEL,
         max_tokens=config.QUESTION_MAX_TOKENS,
@@ -77,7 +77,7 @@ def soru_uret(diff: str, context: DiffContext | None = None,
 
 
 def _normalize(q: Question) -> Question | None:
-    """Check the one-correct-of-four shape, shuffle options and relabel them a-d.
+    """Check the one-correct-of-NUM_OPTIONS shape, shuffle options and relabel them (a-e).
 
     Structured output can't enforce "exactly one correct", so a malformed question is
     dropped (and logged) instead of failing the whole set. Shuffling matters: models tend

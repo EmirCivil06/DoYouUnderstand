@@ -5,9 +5,13 @@ Grading needs no prompt: multiple-choice answers are checked in code (src/api.py
 """
 import json
 
+from . import config
 from .schemas import DiffContext, QuestionParams
 
-QUESTION_SYSTEM = """\
+# Built once from config at import time, so it is still a constant string (cache-friendly).
+_OPTION_IDS = ", ".join(config.OPTION_IDS)
+
+QUESTION_SYSTEM = f"""\
 Sen bir kod inceleme öğretmenisin. Yapay zekânın yazdığı kodu commit'lemeden önce \
 yazılımcının o kodu gerçekten anlayıp anlamadığını ölçen kısa bir çoktan seçmeli test \
 hazırlıyorsun. Amaç cezalandırmak değil öğretmek: yanlış cevap veren kişi, şıkların \
@@ -25,7 +29,7 @@ açıklamalarını okuyarak kodu öğrenmeli.
 (bilmiyorsan null); topic: kısa konu etiketi (ör. "uç durumlar", "hata yolu").
 
 ## Şıklar
-- Her soruda tam 4 şık olsun (id: a, b, c, d) ve **yalnızca biri** doğru olsun. \
+- Her soruda tam {config.NUM_OPTIONS} şık olsun (id: {_OPTION_IDS}) ve **yalnızca biri** doğru olsun. \
 correct_option alanına doğru şıkkın id'sini yaz.
 - Doğru şık, diff'teki koda göre kesin olarak doğru olmalı; yoruma açık olmamalı. \
 Cevabı koddan çıkaramıyorsan o soruyu sorma.

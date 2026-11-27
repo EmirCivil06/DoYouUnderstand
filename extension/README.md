@@ -17,7 +17,7 @@ Değişikliklerini stage et (Kaynak Denetimi panelinde `+`), sonra her zamanki g
 - **Commit kutusunda `Ctrl+Enter`**, panelin üstündeki **🎓** butonu ya da Komut Paleti →
   `Anladın mı? ile commit'le`: quiz açılır, sonunda commit'i eklenti atar.
 
-**3 soru**, her biri **5 şıklı ve tek doğru cevaplı**, **tek tek** gelir (`A`–`E` ya da `1`–`5`
+**3 soru** (ayardan 1–5), her biri **5 şıklı ve tek doğru cevaplı**, **tek tek** gelir (`A`–`E` ya da `1`–`5`
 ile seç, `Enter` = cevabı kontrol et). Her sorudan hemen sonra doğru şıkkın açıklaması ve her
 yanlış şıkkın **aslında ne yaptığı** gösterilir; en sonda doğru/yanlış sayısı ve her sorunun
 kısa özeti gelir. Sonuç ne olursa olsun commit
@@ -43,57 +43,26 @@ VS Code eklentisi (bu klasör)  ── HTTP ──▶  backend/ (FastAPI, 127.0.
  - commit'i atar (git eklentisi API'si)
 ```
 
-Sözleşme: `backend/CLAUDE.md` bölüm 4 (`GET /health`, `POST /questions`, `POST /evaluate`) +
-aşağıdaki çoktan seçmeli eki. Eklenti sorular için yalnızca `id, question, file, line_hint, topic,
-options` alanlarını alır (beyaz liste): `expected_points`, doğru şık ya da açıklama yanlışlıkla
-gönderilse bile cevaplamadan önce asla gösterilmez.
+Sözleşme: `backend/CLAUDE.md` bölüm 4 (kaynak: `backend/src/schemas.py`). Eklenti sorular için
+yalnızca `id, question, file, line_hint, topic, options` alanlarını alır (beyaz liste): doğru şık ya da
+açıklama yanlışlıkla gönderilse bile cevaplamadan önce asla gösterilmez.
 
-## Backend sözleşmesi: çoktan seçmeli eki (backend'e iletilecek)
+## Backend ile konuşma (özet)
 
-Eklenti artık **3 soru, her biri 5 şıklı, tek doğru cevaplı** çoktan seçmeli soru istiyor.
-Ek geriye uyumlu: backend `options` göndermezse eklenti eski açık uçlu ekranı gösterir.
+| Uç | Eklenti gönderir | Eklenti kullanır |
+|---|---|---|
+| `GET /health` | – | `ok` |
+| `POST /questions` | `diff`, `context`, `params: {num_questions (1–5), difficulty, language, focus_topics}` | `session_id`, `questions[].options` (5 şık, `a`–`e`), `omitted_files` |
+| `POST /evaluate` | `{session_id, answers: [{question_id, option_id}]}` | `results[].correct`, `correct_option`, `options[].is_correct / explanation` |
 
-**`POST /questions` isteğinde `params`'a iki alan eklendi** (pydantic bilmediği alanı zaten yok sayar):
+- Eklenti her soru cevaplanınca **hemen** `/evaluate` çağırır; `answers`'ta **tek soru** vardır.
+  Backend oturumdaki tüm soruları döndürür, eklenti sadece sorduğunu alır (`src/backend.ts` → `sonucCevir`).
+- Ekranda doğru şıkkın `explanation`'ı "neden doğru", diğerlerininki "aslında ne yapar" olarak gösterilir.
+  Şık harfleri ekranda büyük (`A`–`E`) görünür.
+- `omitted_files` doluysa soru ekranında "bu dosyalar hakkında soru sorulmadı" notu çıkar.
+- Soru yoksa (önemsiz diff) hook modunda commit direkt devam eder.
 
-```json
-"params": { "num_questions": 3, "difficulty": "orta", "language": "tr", "focus_topics": [],
-            "question_type": "multiple_choice", "num_options": 5 }
-```
-
-**Yanıttaki her soruya `options` eklendi.** Doğru şık ve açıklamalar yanıtta **yok**; backend
-bunları `session_id` altında saklar (`expected_points` gibi):
-
-```json
-{ "id": "q1", "question": "`ortalama_fiyat({})` çağrılırsa ne olur?", "file": "sepet.py",
-  "line_hint": 24, "topic": "uç durumlar",
-  "options": [ {"id": "A", "text": "`0` döndürür"}, {"id": "B", "text": "`None` döndürür"},
-               {"id": "C", "text": "`ZeroDivisionError` hatası verir"}, {"id": "D", "text": "`KeyError` hatası verir"},
-               {"id": "E", "text": "`nan` döndürür"} ] }
-```
-
-**`POST /evaluate` isteği aynı**; `answer` artık seçilen şıkkın id'si: `{"question_id": "q1", "answer": "C"}`.
-**Önemli:** eklenti her soru cevaplanınca **hemen** `/evaluate` çağırır ve `answers` listesinde **yalnızca o
-soru** olur (aynı `session_id` ile 3 ayrı istek). Backend sadece gönderilen soruları değerlendirip
-`results`'ta sadece onları döndürmeli; oturum ilk değerlendirmeden sonra silinmemeli.
-Çoktan seçmeli değerlendirme için Claude'a gerek yok, backend doğru şıkla karşılaştırır (bedava).
-
-**Yanıttaki her sonuca iki alan eklendi:**
-
-```json
-{ "question_id": "q1", "correct": false, "score": 0,
-  "feedback": "Senin cevabın A, doğru cevap C.",
-  "explanation": "Boş sepette `sum(...)` 0 olur ve 0'a bölme `ZeroDivisionError` verir.",
-  "correct_option": "C",
-  "option_explanations": { "A": "Bunun için boş sepet kontrolü gerekirdi; kod doğrudan bölüyor.",
-                           "B": "...", "D": "...", "E": "..." } }
-```
-
-- `explanation`: doğru şık **neden doğru** (her zaman dolu).
-- `option_explanations`: her **yanlış** şık **aslında ne yapar / neden yanlış** (doğru şık hariç 4 tane).
-- Claude'dan soru üretirken hepsi tek seferde istenebilir (soru + 5 şık + doğru şık + 5 açıklama);
-  `score` 1 ya da 0, geçme kuralı aynı.
-
-Örnek veri: `src/ornekSorular.ts` (mock ve sahte backend bunu kullanıyor).
+Örnek veri: `src/ornekSorular.ts` (mock mod ve sahte backend bunu kullanıyor).
 
 ## Ayarlar
 
@@ -127,22 +96,20 @@ Backend'e ulaşılamazsa hata ekranında **Örnek sorularla dene** butonu çıka
 cd extension
 npm install
 npm run compile
-npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
+npm run sahte-backend      # gerçek backend gibi davranır, Claude'a gitmez
 ```
 
 - VS Code'da `extension/` klasörünü açıp **F5** → eklenti yeni bir pencerede çalışır.
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.8.0.vsix --force
+  code --install-extension anladin-mi-0.9.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.
-  ```powershell
-  ```
 
-`scripts/sahte-backend.js` ile hata ekranlarını da deneyebilirsin: diff'te `YAVAS` geçerse
-5 sn bekler, `HATA500` geçerse 502 döner.
+`scripts/sahte-backend.js` gerçek backend'in biçimini taklit eder (Claude'a gitmez). Diff'te `YAVAS` geçerse
+5 sn bekler, `HATA500` geçerse 502 döner, `BUYUK` geçerse `omitted_files` dolu gelir.
 
 ## Dosyalar
 

@@ -14,7 +14,7 @@ export type Mod = "buton" | "hook";
 /** Eklenti -> webview */
 export type Gorunum =
   | { tip: "yukleniyor"; metin: string }
-  | { tip: "sorular"; mod: Mod; sorular: Soru[]; baslik: Baslik; commitMesaji: string }
+  | { tip: "sorular"; mod: Mod; sorular: Soru[]; baslik: Baslik; commitMesaji: string; atlananlar: string[] }
   | { tip: "sorusuz"; mod: Mod; baslik: Baslik; commitMesaji: string }
   | { tip: "soruSonucu"; soruId: string; sonuc?: Sonuc; hata?: string }
   | { tip: "commitlendi"; mesaj: string }
@@ -120,6 +120,7 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
   .adimlar span.d { background: var(--iyi); }
   .adimlar span.y { background: var(--kotu); }
   .ipucu { color: var(--soluk); font-size: .85em; margin-top: 8px; }
+  .atlanan { color: var(--soluk); font-size: .85em; margin: -6px 0 12px; }
 
   .karar { margin: 0 0 10px; font-weight: 600; }
   .karar.dogru { color: var(--iyi); } .karar.yanlis { color: var(--kotu); }
@@ -216,7 +217,7 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
             <input type="radio" name="secenek" value="\${kac(o.id)}" \${secilen === o.id ? "checked" : ""}>
             <span class="harf">\${kac(o.id)}</span><span class="metin">\${metin(o.text)}</span>
           </label>\`).join("")}</div>
-        <div class="ipucu"><kbd>A</kbd>–<kbd>\${kac(s.options[s.options.length - 1].id)}</kbd> ile seç, <kbd>Enter</kbd> ile kontrol et</div>\`;
+        <div class="ipucu"><kbd>A</kbd>–<kbd>\${kac(s.options[s.options.length - 1].id.toUpperCase())}</kbd> ile seç, <kbd>Enter</kbd> ile kontrol et</div>\`;
     } else {
       govde = \`<textarea id="cevap" placeholder="Kendi cümlelerinle anlat. Emin değilsen tahminini yaz.">\${kac(secilen || "")}</textarea>
         <div class="ipucu"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> ile kontrol et</div>\`;
@@ -228,6 +229,8 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
 
     kok.innerHTML = baslik(mod === "hook" ? "Commit bekliyor: önce birkaç soru." : "Commit'lemeden önce kısa bir kontrol.") +
       \`<div class="adimlar">\${ilerleme}</div>
+      \${quiz.atlananlar.length ? \`<div class="atlanan">Diff çok büyük olduğu için bu dosyalar hakkında soru sorulmadı:
+        \${quiz.atlananlar.map((f) => "<code>" + kac(f) + "</code>").join(", ")}</div>\` : ""}
       <section class="kart\${sonuc ? " cevaplandi" : ""}">
         <div class="ust"><span class="no">Soru \${i + 1} / \${n}</span><span class="konu">\${kac(s.topic)}</span></div>
         \${s.file ? \`<div class="dosya">\${kac(s.file)}\${s.line_hint ? ":" + s.line_hint : ""}</div>\` : ""}
@@ -335,9 +338,10 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
       const secilen = quiz.cevaplar[s.id];
       let detay;
       if (coktanMi(s)) {
+        const buyuk = (x) => kac(String(x || "").toUpperCase());
         detay = r.correct
-          ? \`Cevabın: <b>\${kac(secilen)}</b> · \${metin(sikMetni(s, secilen))}\`
-          : \`Cevabın: <b>\${kac(secilen)}</b> · \${metin(sikMetni(s, secilen))}<br>Doğru: <b>\${kac(r.correct_option)}</b> · \${metin(sikMetni(s, r.correct_option))}\`;
+          ? \`Cevabın: <b>\${buyuk(secilen)}</b> · \${metin(sikMetni(s, secilen))}\`
+          : \`Cevabın: <b>\${buyuk(secilen)}</b> · \${metin(sikMetni(s, secilen))}<br>Doğru: <b>\${buyuk(r.correct_option)}</b> · \${metin(sikMetni(s, r.correct_option))}\`;
       } else {
         detay = \`Cevabın: \${kac(secilen || "(boş)")}\`;
       }
@@ -393,7 +397,8 @@ export function html(nonce: string, tema: Tema = VARSAYILAN_TEMA): string {
 
     sorular(g) {
       sonBaslik = g.baslik;
-      quiz = { mod: g.mod, sorular: g.sorular, i: 0, cevaplar: {}, sonuclar: {}, bekliyor: false, hata: null, commitMesaji: g.commitMesaji };
+      quiz = { mod: g.mod, sorular: g.sorular, i: 0, cevaplar: {}, sonuclar: {}, bekliyor: false, hata: null,
+               commitMesaji: g.commitMesaji, atlananlar: g.atlananlar || [] };
       adimCiz();
     },
 

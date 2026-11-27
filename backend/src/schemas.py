@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import config
+
 
 # --- Inputs from the extension -------------------------------------------------
 
@@ -18,7 +20,7 @@ class DiffContext(BaseModel):
 
 
 class QuestionParams(BaseModel):
-    # The question count is fixed (config.NUM_QUESTIONS); it is not a request parameter.
+    num_questions: int = Field(config.NUM_QUESTIONS, ge=1, le=config.MAX_QUESTIONS)
     difficulty: Literal["kolay", "orta", "zor"] = "orta"
     language: str = "tr"
     focus_topics: list[str] = []
@@ -27,7 +29,7 @@ class QuestionParams(BaseModel):
 # --- Claude structured outputs -------------------------------------------------
 
 class Option(BaseModel):
-    id: str = Field(description="Option label: a, b, c or d")
+    id: str = Field(description="Option label: " + ", ".join(config.OPTION_IDS))
     text: str
     explanation: str = Field(
         description="Why this option is correct (for the correct one) or why it is wrong")
@@ -39,7 +41,8 @@ class Question(BaseModel):
     file: str
     line_hint: int | None = None
     topic: str
-    options: list[Option] = Field(description="Exactly 4 options, exactly one of them correct")
+    options: list[Option] = Field(
+        description=f"Exactly {config.NUM_OPTIONS} options, exactly one of them correct")
     correct_option: str = Field(description="id of the single correct option")
 
 

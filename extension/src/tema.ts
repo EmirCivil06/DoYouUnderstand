@@ -104,7 +104,8 @@ export const ORTAK_CSS = /* css */ `
   label.secenek:hover { border-color: var(--vscode-focusBorder); }
   .secenek input { position: absolute; opacity: 0; pointer-events: none; }
   .secenek .harf { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-                   font-weight: 600; font-size: .85em; border: 1px solid var(--kenar); color: var(--soluk); }
+                   font-weight: 600; font-size: .85em; border: 1px solid var(--kenar); color: var(--soluk);
+                   text-transform: uppercase; }
   .secenek .metin { flex: 1; padding-top: 1px; }
   .secenek.secili { border-color: var(--vurgu); background: color-mix(in srgb, var(--vurgu) 12%, var(--vscode-input-background)); }
   .secenek.secili .harf { background: var(--vurgu); border-color: var(--vurgu); color: var(--vscode-button-foreground); }

@@ -144,6 +144,7 @@ class Oturum {
   private baslik!: Baslik;
   private sorular: Soru[] = [];
   private sessionId = "";
+  private atlananlar: string[] = [];
   private bitti = false;
   private commitMesaji = "";
 
@@ -201,19 +202,19 @@ class Oturum {
         difficulty: ayar.get<"kolay" | "orta" | "zor">("difficulty", "orta"),
         language: "tr",
         focus_topics: [],
-        question_type: "multiple_choice",
-        num_options: 5,
       };
       await this.backend.saglik();
       const y = await this.backend.sorular(this.o.diff, context, params);
       this.sorular = y.questions;
       this.sessionId = y.session_id;
+      this.atlananlar = y.omitted_files;
     } catch (e) {
       return this.hata(e);
     }
 
     if (this.sorular.length > 0) {
-      this.panel.ciz({ tip: "sorular", mod: this.o.mod, sorular: this.sorular, baslik: this.baslik, commitMesaji: this.commitMesaji });
+      this.panel.ciz({ tip: "sorular", mod: this.o.mod, sorular: this.sorular, baslik: this.baslik, commitMesaji: this.commitMesaji,
+        atlananlar: this.atlananlar });
     } else if (this.o.mod === "hook") {
       this.hookuBitir("tamam");
       this.panel.kapat();
