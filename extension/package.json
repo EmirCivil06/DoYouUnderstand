@@ -1,0 +1,179 @@
+{
+  "name": "anladin-mi",
+  "displayName": "Anladın mı?",
+  "description": "Commit'ten önce değişikliğin hakkında soru sorar, yanlışta Türkçe anlatır. Kapı değil, öğretmen.",
+  "version": "0.8.0",
+  "publisher": "doyouunderstand",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Education"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "anladinmi.commitWithQuiz",
+        "title": "Anladın mı? ile commit'le",
+        "category": "Anladın mı?",
+        "icon": "$(mortar-board)"
+      },
+      {
+        "command": "anladinmi.installHook",
+        "title": "Commit butonuna bağla (hook kur)",
+        "category": "Anladın mı?"
+      },
+      {
+        "command": "anladinmi.removeHook",
+        "title": "Commit butonundan ayır (hook kaldır)",
+        "category": "Anladın mı?"
+      },
+      {
+        "command": "anladinmi.openSettings",
+        "title": "Görünüm ve ayarlar",
+        "category": "Anladın mı?",
+        "icon": "$(gear)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "anladinmi.commitWithQuiz",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "scmRepository"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "anladinmi.commitWithQuiz",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        }
+      ],
+      "extension/context": [
+        {
+          "command": "anladinmi.openSettings",
+          "when": "extension == doyouunderstand.anladin-mi",
+          "group": "2_configure"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Görünüm",
+        "order": 0,
+        "properties": {
+          "anladinmi.ui.correctColor": {
+            "type": "string",
+            "default": "#22c55e",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Doğru cevap rengi (#RRGGBB).",
+            "order": 0,
+            "format": "color-hex"
+          },
+          "anladinmi.ui.wrongColor": {
+            "type": "string",
+            "default": "#ef4444",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Yanlış cevap rengi (#RRGGBB).",
+            "order": 1,
+            "format": "color-hex"
+          },
+          "anladinmi.ui.optionSize": {
+            "type": "string",
+            "enum": [
+              "kompakt",
+              "normal",
+              "genis"
+            ],
+            "default": "normal",
+            "description": "Şık kutularının boyutu.",
+            "order": 2
+          },
+          "anladinmi.ui.fontSize": {
+            "type": "string",
+            "enum": [
+              "kucuk",
+              "normal",
+              "buyuk"
+            ],
+            "default": "normal",
+            "description": "Quiz ekranının yazı boyutu.",
+            "order": 3
+          },
+          "anladinmi.ui.showWrongExplanations": {
+            "type": "boolean",
+            "default": true,
+            "description": "Cevaptan sonra yanlış şıkların 'aslında ne yaptığı' açıklamalarını göster.",
+            "order": 4
+          }
+        }
+      },
+      {
+        "title": "Quiz ve bağlantı",
+        "order": 1,
+        "properties": {
+          "anladinmi.difficulty": {
+            "type": "string",
+            "enum": [
+              "kolay",
+              "orta",
+              "zor"
+            ],
+            "default": "orta",
+            "description": "Soruların zorluğu.",
+            "order": 0
+          },
+          "anladinmi.numQuestions": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3,
+            "description": "Kaç soru sorulsun (1-5).",
+            "order": 1
+          },
+          "anladinmi.backendUrl": {
+            "type": "string",
+            "default": "http://127.0.0.1:8765",
+            "description": "Backend (FastAPI) adresi.",
+            "order": 2
+          },
+          "anladinmi.autoConnectHook": {
+            "type": "boolean",
+            "default": true,
+            "description": "Repo açılınca mavi Commit butonunu sormadan quiz'e bağla (pre-commit hook kurar). Başka bir hook varsa dokunmaz.",
+            "order": 3
+          },
+          "anladinmi.mockMode": {
+            "type": "boolean",
+            "default": false,
+            "description": "Backend yerine örnek sorular kullan (backend hazır değilken geliştirme/demo için).",
+            "order": 4
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --allow-missing-repository --skip-license",
+    "sahte-backend": "node scripts/sahte-backend.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.5.0"
+  }
+}
