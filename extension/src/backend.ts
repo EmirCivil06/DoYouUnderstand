@@ -182,8 +182,12 @@ export function mockBackend(): Backend {
       };
     },
     async degerlendir(_sessionId, cevaplar) {
-      await bekle(700);
-      return gecti(son.map(({ id, ornek }) => coktanDegerlendir(ornek, id, cevaplar.find((c) => c.question_id === id)?.answer ?? "")));
+      await bekle(400);
+      // Sadece gönderilen cevapları değerlendir (eklenti her soruyu tek tek yollar).
+      return gecti(cevaplar.flatMap((c) => {
+        const s = son.find((x) => x.id === c.question_id);
+        return s ? [coktanDegerlendir(s.ornek, s.id, c.answer)] : [];
+      }));
     },
   };
 }

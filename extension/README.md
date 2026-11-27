@@ -18,8 +18,9 @@ Değişikliklerini stage et (Kaynak Denetimi panelinde `+`), sonra her zamanki g
   `Anladın mı? ile commit'le`: quiz açılır, sonunda commit'i eklenti atar.
 
 **3 soru**, her biri **5 şıklı ve tek doğru cevaplı**, **tek tek** gelir (`A`–`E` ya da `1`–`5`
-ile seç, `Enter` = sonraki soru). Son sorudan sonra hepsi birlikte değerlendirilir; sonuçta
-doğru/yanlış sayısı, doğru şıkkın açıklaması ve her yanlış şıkkın **aslında ne yaptığı** gösterilir. Sonuç ne olursa olsun commit
+ile seç, `Enter` = cevabı kontrol et). Her sorudan hemen sonra doğru şıkkın açıklaması ve her
+yanlış şıkkın **aslında ne yaptığı** gösterilir; en sonda doğru/yanlış sayısı ve her sorunun
+kısa özeti gelir. Sonuç ne olursa olsun commit
 atılabilir. Hook modunda *Quiz'i atla* ya da *Commit'i iptal et* de seçilebilir; quiz sekmesini
 kapatmak quiz'i atlamak sayılır.
 
@@ -71,6 +72,9 @@ bunları `session_id` altında saklar (`expected_points` gibi):
 ```
 
 **`POST /evaluate` isteği aynı**; `answer` artık seçilen şıkkın id'si: `{"question_id": "q1", "answer": "C"}`.
+**Önemli:** eklenti her soru cevaplanınca **hemen** `/evaluate` çağırır ve `answers` listesinde **yalnızca o
+soru** olur (aynı `session_id` ile 3 ayrı istek). Backend sadece gönderilen soruları değerlendirip
+`results`'ta sadece onları döndürmeli; oturum ilk değerlendirmeden sonra silinmemeli.
 Çoktan seçmeli değerlendirme için Claude'a gerek yok, backend doğru şıkla karşılaştırır (bedava).
 
 **Yanıttaki her sonuca iki alan eklendi:**
@@ -116,7 +120,7 @@ npm run sahte-backend      # sözleşmeye uyan sahte backend, Claude'a gitmez
 - Paketlemek ve kurmak için:
   ```powershell
   npm run package
-  code --install-extension anladin-mi-0.3.0.vsix --force
+  code --install-extension anladin-mi-0.4.0.vsix --force
   ```
   Kodu değiştirip yeniden kurarken `package.json`'daki `version`'ı artır; aynı sürümde VS Code
   eski kodu bellekte tutar ve pencereyi yenilemeyi istemez.

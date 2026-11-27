@@ -1,8 +1,8 @@
-// Quiz ekranı (webview). Durumu eklenti tarafı yönetir; webview çizer ve olay yollar.
-// Sorular TEK TEK gösterilir; son sorudan sonra hepsi birlikte değerlendirilir.
+// Quiz ekranı (webview). Eklenti soruları ve her sorunun sonucunu yollar; webview çizer ve olay yollar.
+// Akış: soru -> cevabı kontrol et -> o sorunun doğru cevabı + açıklamaları -> sonraki soru -> ... -> özet.
 import * as crypto from "crypto";
 import * as vscode from "vscode";
-import type { DegerlendirmeYaniti, Soru } from "./backend";
+import type { Soru, Sonuc } from "./backend";
 
 /**
  * "buton": kullanıcı eklentiden başlattı, commit'i eklenti atar (mesaj sorulur).
@@ -13,10 +13,9 @@ export type Mod = "buton" | "hook";
 /** Eklenti -> webview */
 export type Gorunum =
   | { tip: "yukleniyor"; metin: string }
-  | { tip: "sorular"; mod: Mod; sorular: Soru[]; baslik: Baslik }
+  | { tip: "sorular"; mod: Mod; sorular: Soru[]; baslik: Baslik; commitMesaji: string }
   | { tip: "sorusuz"; mod: Mod; baslik: Baslik; commitMesaji: string }
-  | { tip: "degerlendiriliyor" }
-  | { tip: "sonuc"; mod: Mod; sorular: Soru[]; cevaplar: Record<string, string>; sonuc: DegerlendirmeYaniti; commitMesaji: string }
+  | { tip: "soruSonucu"; soruId: string; sonuc?: Sonuc; hata?: string }
   | { tip: "commitlendi"; mesaj: string }
   | { tip: "hookBitti"; devam: boolean }
   | { tip: "hata"; mod: Mod; metin: string; mockTeklifi: boolean };
@@ -30,10 +29,10 @@ export interface Baslik {
 
 /** Webview -> eklenti */
 export type Olay =
-  | { tip: "gonder"; cevaplar: Record<string, string> }
-  | { tip: "commit"; mesaj: string } // buton modu
-  | { tip: "devam" } //               hook modu: commit sürsün
-  | { tip: "iptal" } //               hook modu: commit iptal
+  | { tip: "kontrol"; soruId: string; cevap: string } // tek bir sorunun cevabını değerlendir
+  | { tip: "commit"; mesaj: string } //                 buton modu
+  | { tip: "devam" } //                                 hook modu: commit sürsün
+  | { tip: "iptal" } //                                 hook modu: commit iptal
   | { tip: "tekrar" }
   | { tip: "mockIleDene" }
   | { tip: "kapat" };
@@ -104,11 +103,12 @@ export function html(nonce: string): string {
   body {
     font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
     color: var(--vscode-foreground); background: var(--vscode-editor-background);
-    margin: 0; padding: 28px 24px 48px; line-height: 1.55;
+    margin: 0; padding: 28px 24px 48px; line-height: 1.5;
   }
   main { max-width: 720px; margin: 0 auto; }
   header { margin-bottom: 20px; }
   h1 { font-size: 1.6em; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
+  h2 { font-size: 1.15em; font-weight: 600; margin: 0 0 12px; }
   .alt { color: var(--soluk); font-size: .95em; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
   .rozet { font-size: .78em; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--kenar); color: var(--soluk); }
   .rozet.mock { border-color: var(--vscode-editorWarning-foreground); color: var(--vscode-editorWarning-foreground); }
@@ -116,14 +116,12 @@ export function html(nonce: string): string {
     background: var(--kart); border: 1px solid var(--kenar); border-radius: 8px;
     padding: 18px 20px; margin-bottom: 14px;
   }
-  .kart.dogru { border-left: 3px solid var(--iyi); }
-  .kart.yanlis { border-left: 3px solid var(--kotu); }
   .ust { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
   .no { font-weight: 600; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; color: var(--soluk); }
   .konu { font-size: .8em; padding: 1px 8px; border-radius: 10px;
           background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .dosya { font-family: var(--vscode-editor-font-family); font-size: .85em; color: var(--soluk); margin-bottom: 8px; }
-  .soru { font-size: 1.1em; margin: 0 0 14px; }
+  .soru { font-size: 1.1em; margin: 0 0 12px; }
   code { font-family: var(--vscode-editor-font-family); font-size: .92em; padding: 0 4px; border-radius: 3px;
          background: var(--vscode-textCodeBlock-background); }
   textarea, input[type=text] {
@@ -132,7 +130,7 @@ export function html(nonce: string): string {
   }
   textarea { min-height: 96px; resize: vertical; }
   textarea:focus, input:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-  label { display: block; font-size: .9em; color: var(--soluk); margin: 18px 0 6px; }
+  label.baslik { display: block; font-size: .9em; color: var(--soluk); margin: 18px 0 6px; }
   .butonlar { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
   .butonlar.orta { justify-content: center; }
   .bosluk { flex: 1; }
@@ -148,49 +146,61 @@ export function html(nonce: string): string {
   button:disabled { opacity: .5; cursor: default; }
   .adimlar { display: flex; gap: 6px; margin: 0 0 16px; }
   .adimlar span { flex: 1; height: 4px; border-radius: 2px; background: var(--kenar); }
-  .adimlar span.bitti { background: var(--vurgu); opacity: .55; }
   .adimlar span.simdi { background: var(--vurgu); }
+  .adimlar span.d { background: var(--iyi); }
+  .adimlar span.y { background: var(--kotu); }
   .ipucu { color: var(--soluk); font-size: .85em; margin-top: 8px; }
-  .secenekler { display: flex; flex-direction: column; gap: 8px; }
-  .secenek { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 6px;
+  kbd { font-family: var(--vscode-editor-font-family); font-size: .85em; padding: 0 5px; border-radius: 3px;
+        border: 1px solid var(--kenar); }
+
+  /* şıklar: sıkı aralık */
+  .secenekler { display: flex; flex-direction: column; gap: 4px; }
+  .secenek { display: flex; gap: 10px; align-items: flex-start; padding: 6px 10px; border-radius: 6px;
              border: 1px solid var(--kenar); background: var(--vscode-input-background); }
   label.secenek { cursor: pointer; position: relative; }
   label.secenek:hover { border-color: var(--vscode-focusBorder); }
   .secenek input { position: absolute; opacity: 0; pointer-events: none; }
-  .secenek .harf { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
-                   font-weight: 600; font-size: .9em; border: 1px solid var(--kenar); color: var(--soluk); }
+  .secenek .harf { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+                   font-weight: 600; font-size: .85em; border: 1px solid var(--kenar); color: var(--soluk); }
   .secenek .metin { flex: 1; padding-top: 1px; }
   .secenek.secili { border-color: var(--vurgu); background: color-mix(in srgb, var(--vurgu) 12%, var(--vscode-input-background)); }
   .secenek.secili .harf { background: var(--vurgu); border-color: var(--vurgu); color: var(--vscode-button-foreground); }
-  .sonuc .secenek { background: transparent; }
-  .sonuc .secenek.dogru { border-color: var(--iyi); background: color-mix(in srgb, var(--iyi) 10%, transparent); }
-  .sonuc .secenek.dogru .harf { background: var(--iyi); border-color: var(--iyi); color: #fff; }
-  .sonuc .secenek.yanlis { border-color: var(--kotu); background: color-mix(in srgb, var(--kotu) 10%, transparent); }
-  .sonuc .secenek.yanlis .harf { background: var(--kotu); border-color: var(--kotu); color: #fff; }
-  .etiket { display: inline-block; margin-left: 8px; font-size: .78em; font-weight: 600; color: var(--soluk);
+  .cevaplandi .secenek { background: transparent; }
+  .cevaplandi .secenek.dogru { border-color: var(--iyi); background: color-mix(in srgb, var(--iyi) 10%, transparent); }
+  .cevaplandi .secenek.dogru .harf { background: var(--iyi); border-color: var(--iyi); color: #fff; }
+  .cevaplandi .secenek.yanlis { border-color: var(--kotu); background: color-mix(in srgb, var(--kotu) 10%, transparent); }
+  .cevaplandi .secenek.yanlis .harf { background: var(--kotu); border-color: var(--kotu); color: #fff; }
+  .etiket { display: inline-block; margin-left: 8px; font-size: .75em; font-weight: 600; color: var(--soluk);
             text-transform: uppercase; letter-spacing: .04em; }
   .dogru .etiket { color: var(--iyi); } .yanlis .etiket { color: var(--kotu); }
-  .aciklama { margin-top: 6px; font-size: .92em; color: var(--vscode-foreground); opacity: .85; }
-  kbd { font-family: var(--vscode-editor-font-family); font-size: .85em; padding: 0 5px; border-radius: 3px;
-        border: 1px solid var(--kenar); }
+  .aciklama { margin-top: 3px; font-size: .9em; opacity: .85; }
+
+  .karar { margin: 0 0 10px; font-weight: 600; }
+  .karar.dogru { color: var(--iyi); } .karar.yanlis { color: var(--kotu); }
+  .cevabin { color: var(--soluk); font-size: .92em; margin: 0 0 8px; white-space: pre-wrap; }
+  .ders { margin-top: 10px; padding: 10px 12px; border-radius: 6px;
+          background: var(--vscode-textBlockQuote-background); border-left: 3px solid var(--vscode-textLink-foreground); }
+  .ders b.baslik { display: block; font-size: .8em; text-transform: uppercase; letter-spacing: .06em; color: var(--soluk); margin-bottom: 4px; }
+  .satir-hata { color: var(--kotu); margin-top: 10px; }
+
   .yukleniyor { display: flex; align-items: center; gap: 12px; color: var(--soluk); padding: 40px 0; justify-content: center; }
   .donen { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--kenar);
            border-top-color: var(--vurgu); animation: don 0.8s linear infinite; }
   @keyframes don { to { transform: rotate(360deg); } }
+
+  /* özet */
   .ozet { display: flex; align-items: center; gap: 18px; }
   .sayi { font-size: 2.2em; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sayi small { font-size: .45em; font-weight: 400; color: var(--soluk); }
-  .sonuc-adim { margin: 14px 0 6px; }
-  .sonuc-adim span { height: 6px; }
-  .sonuc-adim span.d { background: var(--iyi); }
-  .sonuc-adim span.y { background: var(--kotu); }
-  .cevabin { color: var(--soluk); font-size: .92em; margin: 0 0 8px; white-space: pre-wrap; }
-  .geri { margin: 0; }
-  .ders { margin-top: 12px; padding: 10px 12px; border-radius: 6px;
-          background: var(--vscode-textBlockQuote-background); border-left: 3px solid var(--vscode-textLink-foreground); }
-  .ders b.baslik { display: block; font-size: .8em; text-transform: uppercase; letter-spacing: .06em; color: var(--soluk); margin-bottom: 4px; }
-  .durum { font-weight: 600; }
-  .durum.dogru { color: var(--iyi); } .durum.yanlis { color: var(--kotu); }
+  .ozet-liste { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; }
+  .ozet-satir { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 10px 12px; border-radius: 6px;
+                border: 1px solid var(--kenar); }
+  .ozet-satir .isaret { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+                        font-weight: 600; font-size: .85em; color: #fff; }
+  .ozet-satir.dogru .isaret { background: var(--iyi); } .ozet-satir.yanlis .isaret { background: var(--kotu); }
+  .ozet-satir .s { font-weight: 600; margin-bottom: 2px; }
+  .ozet-satir .k { font-size: .9em; color: var(--soluk); }
+  .ozet-satir .k b { color: var(--vscode-foreground); font-weight: 600; }
   .hata { border-left: 3px solid var(--kotu); }
   .bitti-ekran { text-align: center; padding: 36px 0; }
   .bitti-ekran .ikon { font-size: 2.2em; color: var(--iyi); }
@@ -222,119 +232,187 @@ export function html(nonce: string): string {
       \${alt ? "<span>" + alt + "</span>" : ""}</div></header>\`;
   }
 
-  // ---------------------------------------------------------------- sorular (tek tek)
-  let quiz = null; // { mod, sorular, i, cevaplar }
-  let klavye = null; // çoktan seçmeli adımda A–E / 1–5 / Enter kısayolları
+  // quiz = { mod, sorular, i, cevaplar: {id: "B"}, sonuclar: {id: Sonuc}, bekliyor, hata, commitMesaji }
+  let quiz = null;
+  let klavye = null; // aktif ekranın klavye kısayolları
   document.addEventListener("keydown", (e) => {
     if (!klavye || e.target.closest?.("input[type=text], textarea")) return;
     klavye(e);
   });
 
+  const coktanMi = (s) => s.options && s.options.length > 0;
+  const sikMetni = (s, id) => (s.options.find((o) => o.id === id) || { text: "" }).text;
+
+  // ---------------------------------------------------------------- bir soru
   function adimCiz() {
-    const { mod, sorular, i, cevaplar } = quiz;
+    const { mod, sorular, i } = quiz;
     const s = sorular[i];
     const n = sorular.length;
     const son = i === n - 1;
-    const coktan = s.options && s.options.length > 0;
-    const govde = coktan
-      ? \`<div class="secenekler" role="radiogroup">\${s.options.map((o, k) => \`
-          <label class="secenek\${cevaplar[s.id] === o.id ? " secili" : ""}" data-id="\${kac(o.id)}">
-            <input type="radio" name="secenek" value="\${kac(o.id)}" \${cevaplar[s.id] === o.id ? "checked" : ""}>
+    const sonuc = quiz.sonuclar[s.id];
+    const secilen = quiz.cevaplar[s.id];
+
+    const ilerleme = sorular.map((q, k) => {
+      const r = quiz.sonuclar[q.id];
+      return \`<span class="\${r ? (r.correct ? "d" : "y") : k === i ? "simdi" : ""}"></span>\`;
+    }).join("");
+
+    let govde;
+    if (sonuc) {
+      govde = coktanMi(s) ? sikSonucu(s, sonuc, secilen) : acikSonucu(s, sonuc, secilen);
+    } else if (coktanMi(s)) {
+      govde = \`<div class="secenekler" role="radiogroup">\${s.options.map((o) => \`
+          <label class="secenek\${secilen === o.id ? " secili" : ""}" data-id="\${kac(o.id)}">
+            <input type="radio" name="secenek" value="\${kac(o.id)}" \${secilen === o.id ? "checked" : ""}>
             <span class="harf">\${kac(o.id)}</span><span class="metin">\${metin(o.text)}</span>
           </label>\`).join("")}</div>
-          <div class="ipucu"><kbd>A</kbd>–<kbd>\${kac(s.options[s.options.length - 1].id)}</kbd> ile seç, <kbd>Enter</kbd> \${son ? "ile gönder" : "ile sonraki soru"}</div>\`
-      : \`<textarea id="cevap" placeholder="Kendi cümlelerinle anlat. Emin değilsen tahminini yaz.">\${kac(cevaplar[s.id] || "")}</textarea>
-          <div class="ipucu"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> \${son ? "ile gönder" : "ile sonraki soru"}</div>\`;
+        <div class="ipucu"><kbd>A</kbd>–<kbd>\${kac(s.options[s.options.length - 1].id)}</kbd> ile seç, <kbd>Enter</kbd> ile kontrol et</div>\`;
+    } else {
+      govde = \`<textarea id="cevap" placeholder="Kendi cümlelerinle anlat. Emin değilsen tahminini yaz.">\${kac(secilen || "")}</textarea>
+        <div class="ipucu"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> ile kontrol et</div>\`;
+    }
+
+    const anaButon = sonuc
+      ? \`<button id="ileri">\${son ? "Özeti gör" : "Sonraki soru"}</button>\`
+      : \`<button id="kontrol" \${quiz.bekliyor ? "disabled" : ""}>\${quiz.bekliyor ? "Kontrol ediliyor…" : "Cevabı kontrol et"}</button>\`;
+
     kok.innerHTML = baslik(mod === "hook" ? "Commit bekliyor: önce birkaç soru." : "Commit'lemeden önce kısa bir kontrol.") +
-      \`<div class="adimlar">\${sorular.map((_, k) => \`<span class="\${k < i ? "bitti" : k === i ? "simdi" : ""}"></span>\`).join("")}</div>
-      <section class="kart">
+      \`<div class="adimlar">\${ilerleme}</div>
+      <section class="kart\${sonuc ? " cevaplandi" : ""}">
         <div class="ust"><span class="no">Soru \${i + 1} / \${n}</span><span class="konu">\${kac(s.topic)}</span></div>
         \${s.file ? \`<div class="dosya">\${kac(s.file)}\${s.line_hint ? ":" + s.line_hint : ""}</div>\` : ""}
         <p class="soru">\${metin(s.question)}</p>
         \${govde}
+        \${quiz.hata ? \`<div class="satir-hata">\${metin(quiz.hata)}</div>\` : ""}
       </section>
       <div class="butonlar">
-        \${i > 0 ? '<button class="ikincil" id="geri">Geri</button>' : ""}
-        <button id="ileri">\${son ? "Cevapları gönder" : "Sonraki soru"}</button>
+        \${anaButon}
         <span class="bosluk"></span>
         \${mod === "hook"
           ? '<button class="metin" id="atla">Quiz\\'i atla, commit\\'le</button><button class="ikincil" id="iptal">Commit\\'i iptal et</button>'
           : '<button class="ikincil" id="kapat">Vazgeç</button>'}
       </div>\`;
-    const ileriButonu = $("ileri");
-    let kaydet, ileri;
-    if (coktan) {
+
+    tikla("atla", () => gonder({ tip: "devam" }));
+    tikla("iptal", () => gonder({ tip: "iptal" }));
+    tikla("kapat", () => gonder({ tip: "kapat" }));
+
+    if (sonuc) {
+      const ileri = () => { quiz.i++; if (quiz.i >= n) ozetCiz(); else adimCiz(); };
+      tikla("ileri", ileri);
+      $("ileri").focus();
+      klavye = (e) => { if (e.key === "Enter") { e.preventDefault(); ileri(); } };
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    const kontrolButonu = $("kontrol");
+    const kontrol = () => {
+      if (quiz.bekliyor) return;
+      if (!coktanMi(s)) quiz.cevaplar[s.id] = $("cevap").value;
+      const cevap = (quiz.cevaplar[s.id] || "").trim();
+      if (coktanMi(s) && !cevap) return; // tek doğru şık var; seçmeden kontrol edilmez
+      quiz.bekliyor = true; quiz.hata = null;
+      adimCiz();
+      gonder({ tip: "kontrol", soruId: s.id, cevap });
+    };
+    tikla("kontrol", kontrol);
+
+    if (coktanMi(s)) {
       const sec = (id) => {
+        if (quiz.bekliyor) return;
         quiz.cevaplar[s.id] = id;
         kok.querySelectorAll(".secenek").forEach((l) => {
           const evet = l.dataset.id === id;
           l.classList.toggle("secili", evet);
           l.querySelector("input").checked = evet;
         });
-        ileriButonu.disabled = false;
+        kontrolButonu.disabled = false;
       };
-      kaydet = () => {};
-      ileri = () => {
-        if (!quiz.cevaplar[s.id]) return; // tek doğru şık var; seçmeden geçilmez
-        if (son) gonder({ tip: "gonder", cevaplar: quiz.cevaplar });
-        else { quiz.i++; adimCiz(); }
-      };
-      kok.querySelectorAll(".secenek").forEach((l) => (l.onclick = (e) => { e.preventDefault(); sec(l.dataset.id); }));
-      ileriButonu.disabled = !quiz.cevaplar[s.id];
+      kok.querySelectorAll("label.secenek").forEach((l) => (l.onclick = (e) => { e.preventDefault(); sec(l.dataset.id); }));
+      if (!quiz.bekliyor) kontrolButonu.disabled = !secilen;
       klavye = (e) => {
-        const harf = e.key.toUpperCase();
-        const sira = "12345".indexOf(e.key);
-        const hedef = s.options.find((o) => o.id.toUpperCase() === harf) || s.options[sira];
-        if (hedef && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); sec(hedef.id); }
-        else if (e.key === "Enter") { e.preventDefault(); ileri(); }
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+        const hedef = s.options.find((o) => o.id.toUpperCase() === e.key.toUpperCase()) || s.options["12345".indexOf(e.key)];
+        if (hedef) { e.preventDefault(); sec(hedef.id); }
+        else if (e.key === "Enter") { e.preventDefault(); kontrol(); }
       };
-      ileriButonu.focus();
+      kontrolButonu.focus();
     } else {
       const t = $("cevap");
       t.focus(); t.setSelectionRange(t.value.length, t.value.length);
-      kaydet = () => (quiz.cevaplar[s.id] = t.value);
-      ileri = () => {
-        kaydet();
-        if (son) gonder({ tip: "gonder", cevaplar: quiz.cevaplar });
-        else { quiz.i++; adimCiz(); }
-      };
-      t.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ileri(); } });
-      klavye = null;
+      t.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); kontrol(); } });
     }
-    tikla("ileri", ileri);
-    tikla("geri", () => { kaydet(); quiz.i--; adimCiz(); });
-    tikla("atla", () => gonder({ tip: "devam" }));
-    tikla("iptal", () => gonder({ tip: "iptal" }));
-    tikla("kapat", () => gonder({ tip: "kapat" }));
   }
 
-  /** Çoktan seçmeli sonuç: her şık, doğru olan neden doğru, yanlışlar aslında ne yapar. */
-  function sikSonucu(q, r, secilen) {
+  /** Çoktan seçmeli sonuç: her şık; doğru olan neden doğru, yanlışlar aslında ne yapar. */
+  function sikSonucu(s, r, secilen) {
     const dogruId = r.correct_option;
     const aciklamalar = r.option_explanations || {};
-    return \`<div class="secenekler sonuc">\${q.options.map((o) => {
+    return \`<p class="karar \${r.correct ? "dogru" : "yanlis"}">\${r.correct ? "✓ Doğru!" : "✗ Yanlış"}</p>
+      <div class="secenekler">\${s.options.map((o) => {
       const dogru = o.id === dogruId;
       const benim = o.id === secilen;
       const sinif = dogru ? "dogru" : benim ? "yanlis" : "";
-      const etiket = dogru && benim ? "Doğru cevap · senin cevabın"
-        : dogru ? "Doğru cevap" : benim ? "Senin cevabın" : "";
+      const etiket = dogru && benim ? "Doğru cevap · senin cevabın" : dogru ? "Doğru cevap" : benim ? "Senin cevabın" : "";
       const aciklama = dogru ? r.explanation : aciklamalar[o.id];
       return \`<div class="secenek \${sinif}">
           <span class="harf">\${dogru ? "✓" : benim ? "✗" : kac(o.id)}</span>
-          <div class="metin">\${metin(o.text)}
-            \${etiket ? \`<span class="etiket">\${etiket}</span>\` : ""}
+          <div class="metin">\${metin(o.text)}\${etiket ? \`<span class="etiket">\${etiket}</span>\` : ""}
             \${aciklama ? \`<div class="aciklama">\${dogru ? "" : "<b>Aslında:</b> "}\${metin(aciklama)}</div>\` : ""}
           </div></div>\`;
     }).join("")}</div>\`;
   }
 
-  // ---------------------------------------------------------------- sonuç sonrası butonlar
+  /** Açık uçlu sonuç (backend options göndermezse). */
+  function acikSonucu(s, r, cevap) {
+    return \`<p class="karar \${r.correct ? "dogru" : "yanlis"}">\${r.correct ? "✓ Doğru!" : "✗ Yanlış"}</p>
+      <p class="cevabin">Cevabın: \${kac(cevap || "(boş)")}</p>
+      <p>\${metin(r.feedback)}</p>
+      \${r.explanation ? \`<div class="ders"><b class="baslik">Ders</b>\${metin(r.explanation)}</div>\` : ""}\`;
+  }
+
+  // ---------------------------------------------------------------- özet
+  function ozetCiz() {
+    const { mod, sorular } = quiz;
+    const n = sorular.length;
+    const dogru = sorular.filter((s) => quiz.sonuclar[s.id]?.correct).length;
+    const ozetMetni = dogru === n ? "Harika, bu değişikliği anlamışsın."
+      : dogru === 0 ? "Bu değişikliği birlikte netleştirelim; açıklamalar yukarıdaki sorularda."
+      : "Birkaç noktayı birlikte netleştirdik.";
+    const satirlar = sorular.map((s, k) => {
+      const r = quiz.sonuclar[s.id] || {};
+      const secilen = quiz.cevaplar[s.id];
+      let detay;
+      if (coktanMi(s)) {
+        detay = r.correct
+          ? \`Cevabın: <b>\${kac(secilen)}</b> · \${metin(sikMetni(s, secilen))}\`
+          : \`Cevabın: <b>\${kac(secilen)}</b> · \${metin(sikMetni(s, secilen))}<br>Doğru: <b>\${kac(r.correct_option)}</b> · \${metin(sikMetni(s, r.correct_option))}\`;
+      } else {
+        detay = \`Cevabın: \${kac(secilen || "(boş)")}\`;
+      }
+      return \`<div class="ozet-satir \${r.correct ? "dogru" : "yanlis"}">
+        <span class="isaret">\${r.correct ? "✓" : "✗"}</span>
+        <div><div class="s">\${k + 1}. \${metin(s.question)}</div><div class="k">\${detay}</div></div></div>\`;
+    }).join("");
+
+    kok.innerHTML = baslik() +
+      \`<section class="kart">
+        <h2>Özet</h2>
+        <div class="ozet"><div class="sayi">\${dogru} / \${n} <small>doğru</small></div><div>\${kac(ozetMetni)}</div></div>
+        <div class="ozet-liste">\${satirlar}</div>
+      </section>\` + bitisButonlari(mod, quiz.commitMesaji);
+    bitisBagla(mod);
+    window.scrollTo(0, 0);
+  }
+
+  // ---------------------------------------------------------------- bitiş butonları
   function bitisButonlari(mod, commitMesaji) {
     if (mod === "hook") {
       return \`<div class="butonlar"><button id="devam">Commit'i tamamla</button>
         <button class="ikincil" id="iptal">Commit'i iptal et</button></div>\`;
     }
-    return \`<label for="mesaj">Commit mesajı</label>
+    return \`<label class="baslik" for="mesaj">Commit mesajı</label>
       <input type="text" id="mesaj" value="\${kac(commitMesaji)}" placeholder="ör. sepet: indirim kodu eklendi">
       <div class="butonlar"><button id="commit">Commit'le</button>
         <button class="ikincil" id="kapat">Vazgeç</button></div>\`;
@@ -344,6 +422,7 @@ export function html(nonce: string): string {
       tikla("devam", () => gonder({ tip: "devam" }));
       tikla("iptal", () => gonder({ tip: "iptal" }));
       $("devam").focus();
+      klavye = (e) => { if (e.key === "Enter") { e.preventDefault(); $("devam").click(); } };
       return;
     }
     const girdi = $("mesaj"), buton = $("commit");
@@ -352,9 +431,10 @@ export function html(nonce: string): string {
     girdi.addEventListener("keydown", (e) => { if (e.key === "Enter" && !buton.disabled) buton.click(); });
     buton.onclick = () => { buton.disabled = true; gonder({ tip: "commit", mesaj: girdi.value.trim() }); };
     tikla("kapat", () => gonder({ tip: "kapat" }));
+    if (!girdi.value) girdi.focus();
   }
 
-  // ---------------------------------------------------------------- ekranlar
+  // ---------------------------------------------------------------- eklentiden gelen ekranlar
   const ciz = {
     yukleniyor(g) {
       kok.innerHTML = baslik() + \`<div class="yukleniyor"><div class="donen"></div>\${kac(g.metin)}</div>\`;
@@ -362,7 +442,15 @@ export function html(nonce: string): string {
 
     sorular(g) {
       sonBaslik = g.baslik;
-      quiz = { mod: g.mod, sorular: g.sorular, i: 0, cevaplar: {} };
+      quiz = { mod: g.mod, sorular: g.sorular, i: 0, cevaplar: {}, sonuclar: {}, bekliyor: false, hata: null, commitMesaji: g.commitMesaji };
+      adimCiz();
+    },
+
+    soruSonucu(g) {
+      if (!quiz) return;
+      quiz.bekliyor = false;
+      if (g.sonuc) { quiz.sonuclar[g.soruId] = g.sonuc; quiz.hata = null; }
+      else quiz.hata = g.hata || "Cevap kontrol edilemedi, tekrar dene.";
       adimCiz();
     },
 
@@ -372,40 +460,6 @@ export function html(nonce: string): string {
         \`<section class="kart"><p class="soru">Bu değişiklik sadece biçim/yorum gibi önemsiz şeyler içeriyor, soracak bir şey yok.</p></section>\` +
         bitisButonlari(g.mod, g.commitMesaji);
       bitisBagla(g.mod);
-    },
-
-    degerlendiriliyor() { ciz.yukleniyor({ metin: "Cevapların değerlendiriliyor…" }); },
-
-    sonuc(g) {
-      const s = g.sonuc;
-      const n = s.results.length;
-      const dogru = s.results.filter((r) => r.correct).length;
-      const ozetMetni = dogru === n
-        ? "Harika, bu değişikliği anlamışsın."
-        : dogru === 0
-          ? "Bu değişikliği birlikte netleştirelim. Aşağıdaki açıklamalara göz at."
-          : "Birkaç noktayı birlikte netleştirelim. Aşağıdaki açıklamalara göz at.";
-      const soruBul = (id) => g.sorular.find((q) => q.id === id) || { question: "" };
-      kok.innerHTML = baslik() +
-        \`<section class="kart"><div class="ozet">
-            <div class="sayi">\${dogru} / \${n} <small>doğru</small></div><div>\${kac(ozetMetni)}</div></div>
-          <div class="adimlar sonuc-adim">\${s.results.map((r) => \`<span class="\${r.correct ? "d" : "y"}"></span>\`).join("")}</div>
-          <div class="not">\${dogru} doğru · \${n - dogru} yanlış</div></section>\` +
-        s.results.map((r, i) => {
-          const q = soruBul(r.question_id);
-          return \`<section class="kart \${r.correct ? "dogru" : "yanlis"}">
-            <div class="ust"><span class="no">Soru \${i + 1}</span>
-              <span class="durum \${r.correct ? "dogru" : "yanlis"}">\${r.correct ? "✓ Doğru" : "✗ Yanlış"}</span></div>
-            <p class="soru">\${metin(q.question)}</p>
-            \${q.options && q.options.length ? sikSonucu(q, r, g.cevaplar[r.question_id]) : \`
-              <p class="cevabin">Cevabın: \${kac(g.cevaplar[r.question_id] || "(boş)")}</p>
-              <p class="geri">\${metin(r.feedback)}</p>
-              \${r.explanation ? \`<div class="ders"><b class="baslik">Ders</b>\${metin(r.explanation)}</div>\` : ""}\`}
-          </section>\`;
-        }).join("") +
-        bitisButonlari(g.mod, g.commitMesaji);
-      bitisBagla(g.mod);
-      window.scrollTo(0, 0);
     },
 
     commitlendi(g) {

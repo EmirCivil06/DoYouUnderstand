@@ -76,10 +76,13 @@ async function yonlendir(yol, govde) {
     const oturum = oturumlar.get(session_id);
     if (!oturum) return [404, { detail: "Oturum bulunamadı ya da süresi doldu. Soruları yeniden iste." }];
     if (!Array.isArray(answers)) return [422, { detail: "answers listesi zorunlu" }];
-    await bekle(1000);
+    await bekle(600);
     const degerlendir = oturum.tip === "open" ? acikDegerlendir : coktanDegerlendir;
-    return [200, gecti(oturum.sorular.map(({ id, ornek }) =>
-      degerlendir(ornek, id, answers.find((a) => a.question_id === id)?.answer ?? "")))];
+    // Sadece gönderilen cevaplar değerlendirilir (eklenti her soruyu cevaplanınca tek tek yollar).
+    const bilinmeyen = answers.find((a) => !oturum.sorular.some((s) => s.id === a.question_id));
+    if (bilinmeyen) return [422, { detail: `Bilinmeyen soru: ${bilinmeyen.question_id}` }];
+    return [200, gecti(answers.map((a) =>
+      degerlendir(oturum.sorular.find((s) => s.id === a.question_id).ornek, a.question_id, a.answer ?? "")))];
   }
 
   return [404, { detail: "Not Found" }];

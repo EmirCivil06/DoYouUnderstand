@@ -162,7 +162,7 @@ class Oturum {
 
   private olay(o: Olay) {
     switch (o.tip) {
-      case "gonder": return void this.degerlendir(o.cevaplar);
+      case "kontrol": return void this.kontrol(o.soruId, o.cevap);
       case "commit": return void this.commitle(o.mesaj);
       case "tekrar": return void this.baslat(vscode.workspace.getConfiguration("anladinmi").get<boolean>("mockMode", false));
       case "mockIleDene": return void this.baslat(true);
@@ -208,7 +208,7 @@ class Oturum {
     }
 
     if (this.sorular.length > 0) {
-      this.panel.ciz({ tip: "sorular", mod: this.o.mod, sorular: this.sorular, baslik: this.baslik });
+      this.panel.ciz({ tip: "sorular", mod: this.o.mod, sorular: this.sorular, baslik: this.baslik, commitMesaji: this.commitMesaji });
     } else if (this.o.mod === "hook") {
       this.hookuBitir("tamam");
       this.panel.kapat();
@@ -218,16 +218,15 @@ class Oturum {
     }
   }
 
-  private async degerlendir(cevaplar: Record<string, string>) {
-    this.panel.ciz({ tip: "degerlendiriliyor" });
+  /** Tek bir sorunun cevabını değerlendirir; sonuç o sorunun altında hemen gösterilir. */
+  private async kontrol(soruId: string, cevap: string) {
     try {
-      const sonuc = await this.backend.degerlendir(
-        this.sessionId,
-        this.sorular.map((s) => ({ question_id: s.id, answer: (cevaplar[s.id] ?? "").trim() }))
-      );
-      this.panel.ciz({ tip: "sonuc", mod: this.o.mod, sorular: this.sorular, cevaplar, sonuc, commitMesaji: this.commitMesaji });
+      const y = await this.backend.degerlendir(this.sessionId, [{ question_id: soruId, answer: cevap.trim() }]);
+      const sonuc = y.results.find((r) => r.question_id === soruId);
+      if (!sonuc) throw new Error("Backend bu sorunun sonucunu döndürmedi.");
+      this.panel.ciz({ tip: "soruSonucu", soruId, sonuc });
     } catch (e) {
-      this.hata(e);
+      this.panel.ciz({ tip: "soruSonucu", soruId, hata: hataMetni(e) });
     }
   }
 
