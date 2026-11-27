@@ -158,10 +158,12 @@ export function html(nonce: string): string {
            border-top-color: var(--vurgu); animation: don 0.8s linear infinite; }
   @keyframes don { to { transform: rotate(360deg); } }
   .ozet { display: flex; align-items: center; gap: 18px; }
-  .yuzde { font-size: 2.4em; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-  .cubuk { height: 6px; border-radius: 3px; background: var(--kenar); overflow: hidden; margin-top: 12px; }
-  .cubuk > div { height: 100%; background: var(--iyi); }
-  .cubuk.dusuk > div { background: var(--vscode-editorWarning-foreground); }
+  .sayi { font-size: 2.2em; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sayi small { font-size: .45em; font-weight: 400; color: var(--soluk); }
+  .sonuc-adim { margin: 14px 0 6px; }
+  .sonuc-adim span { height: 6px; }
+  .sonuc-adim span.d { background: var(--iyi); }
+  .sonuc-adim span.y { background: var(--kotu); }
   .cevabin { color: var(--soluk); font-size: .92em; margin: 0 0 8px; white-space: pre-wrap; }
   .geri { margin: 0; }
   .ders { margin-top: 12px; padding: 10px 12px; border-radius: 6px;
@@ -291,19 +293,24 @@ export function html(nonce: string): string {
 
     sonuc(g) {
       const s = g.sonuc;
-      const yuzde = Math.round((s.score ?? 0) * 100);
-      const ozetMetni = s.passed
+      const n = s.results.length;
+      const dogru = s.results.filter((r) => r.correct).length;
+      const ozetMetni = dogru === n
         ? "Harika, bu değişikliği anlamışsın."
-        : "Birkaç noktayı birlikte netleştirelim. Aşağıdaki açıklamalara göz at.";
+        : dogru === 0
+          ? "Bu değişikliği birlikte netleştirelim. Aşağıdaki açıklamalara göz at."
+          : "Birkaç noktayı birlikte netleştirelim. Aşağıdaki açıklamalara göz at.";
       const soruBul = (id) => g.sorular.find((q) => q.id === id) || { question: "" };
       kok.innerHTML = baslik() +
-        \`<section class="kart"><div class="ozet"><div class="yuzde">%\${yuzde}</div><div>\${kac(ozetMetni)}</div></div>
-          <div class="cubuk \${s.passed ? "" : "dusuk"}"><div id="dolu"></div></div></section>\` +
+        \`<section class="kart"><div class="ozet">
+            <div class="sayi">\${dogru} / \${n} <small>doğru</small></div><div>\${kac(ozetMetni)}</div></div>
+          <div class="adimlar sonuc-adim">\${s.results.map((r) => \`<span class="\${r.correct ? "d" : "y"}"></span>\`).join("")}</div>
+          <div class="not">\${dogru} doğru · \${n - dogru} yanlış</div></section>\` +
         s.results.map((r, i) => {
           const q = soruBul(r.question_id);
           return \`<section class="kart \${r.correct ? "dogru" : "yanlis"}">
             <div class="ust"><span class="no">Soru \${i + 1}</span>
-              <span class="durum \${r.correct ? "dogru" : "yanlis"}">\${r.correct ? "✓ Doğru" : "✗ Yanlış"} · %\${Math.round((r.score ?? 0) * 100)}</span></div>
+              <span class="durum \${r.correct ? "dogru" : "yanlis"}">\${r.correct ? "✓ Doğru" : "✗ Yanlış"}</span></div>
             <p class="soru">\${metin(q.question)}</p>
             <p class="cevabin">Cevabın: \${kac(g.cevaplar[r.question_id] || "(boş)")}</p>
             <p class="geri">\${metin(r.feedback)}</p>
@@ -311,8 +318,6 @@ export function html(nonce: string): string {
           </section>\`;
         }).join("") +
         bitisButonlari(g.mod, g.commitMesaji);
-      // CSP satır içi style'a izin vermiyor; genişliği JS ile veriyoruz.
-      $("dolu").style.width = Math.max(0, Math.min(100, yuzde)) + "%";
       bitisBagla(g.mod);
       window.scrollTo(0, 0);
     },

@@ -2,7 +2,7 @@
   "name": "anladin-mi",
   "displayName": "Anladın mı?",
   "description": "Commit'ten önce değişikliğin hakkında soru sorar, yanlışta Türkçe anlatır. Kapı değil, öğretmen.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "doyouunderstand",
   "license": "MIT",
   "engines": {
