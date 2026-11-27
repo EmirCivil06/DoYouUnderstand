@@ -28,6 +28,21 @@ def sor(metin):
         return ""
 
 
+def anahtari_yukle():
+    """Windows: setx ile kaydedilen anahtar, setx'ten önce açılmış terminallerde görünmez.
+    Ortamda yoksa kullanıcının kayıtlı ortam değişkenlerinden (HKCU\\Environment) okur."""
+    if os.environ.get("ANTHROPIC_API_KEY") or os.name != "nt":
+        return
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as anahtar:
+            deger, _ = winreg.QueryValueEx(anahtar, "ANTHROPIC_API_KEY")
+    except OSError:
+        return
+    if deger:
+        os.environ["ANTHROPIC_API_KEY"] = deger
+
+
 def evet_mi(metin):
     return sor(metin).lower() in ("e", "evet", "y", "yes")
 
@@ -184,6 +199,7 @@ def main():
             akim.reconfigure(encoding="utf-8", errors="replace")
         except AttributeError:
             pass
+    anahtari_yukle()
 
     komut = sys.argv[1] if len(sys.argv) > 1 else ""
     komutlar = {
